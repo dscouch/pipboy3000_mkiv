@@ -1,0 +1,180 @@
+# The pip-boy coprocessor has delegated responsibility
+# for maintaining the BLE scanner, running the haptic
+# feedback and the piezo sound for simulating a
+# geiger counter and detecting "radiation" in the form
+# of a BLE server.
+# the Coproc reports data back to the main display
+# through a serial connection and doesn't have any
+# wifi connectivity with Home Assistant.
+
+esphome:
+  name: pip-boy-coproc
+  friendly_name: pip-boy-coproc
+  min_version: 2025.11.0
+  name_add_mac_suffix: false
+
+esp32:
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+  hardware_uart: USB_SERIAL_JTAG
+  logs:
+    # This silences the constant "Sensor updated" and BLE discovery spam!
+    sensor: INFO
+    esp32_ble_tracker: INFO
+    esp32_ble: INFO
+
+uart:
+  id: uart_data_bus
+  tx_pin: GPIO21
+  rx_pin: GPIO20
+  baud_rate: 9600
+
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 300ms
+    active: false
+
+globals:
+  - id: current_rads
+    type: int
+    initial_value: '0'
+  - id: fudge_factor
+    type: int
+    initial_value: '0' 
+
+output:
+  - platform: gpio
+    pin: GPIO4
+    id: speaker_pin
+  - platform: gpio
+    pin: GPIO3
+    id: haptic_pin
+
+sensor:
+  - platform: ble_rssi
+    mac_address: "84:FC:E6:00:8F:6A"
+    id: beacon_1
+    filters:
+      - timeout:
+          timeout: 5s
+          value: -100.0
+  - platform: ble_rssi
+    mac_address: "DE:AD:BE:EF:00:02"
+    id: beacon_2
+    filters:
+      - timeout:
+          timeout: 5s
+          value: -100.0
+  - platform: ble_rssi
+    mac_address: "DE:AD:BE:EF:00:03"
+    id: beacon_3
+    filters:
+      - timeout:
+          timeout: 5s
+          value: -100.0
+  - platform: ble_rssi
+    mac_address: "DE:AD:BE:EF:00:04"
+    id: beacon_4
+    filters:
+      - timeout:
+          timeout: 5s
+          value: -100.0
+
+script:
+  - id: geiger_click
+    mode: restart
+    then:
+      - logger.log: "FIRE: Triggering pins now!"
+      - output.turn_on: speaker_pin
+      - output.turn_on: haptic_pin
+      - delay: 5ms
+      - output.turn_off: speaker_pin
+      # A massive 100ms thump to guarantee we overcome physical inertia
+      - delay: 100ms 
+      - output.turn_off: haptic_pin
+
+interval:
+  # ---------------------------------------------------------
+  # LOOP 1: THE SCANNER (Runs every 500ms)
+  # ---------------------------------------------------------
+  - interval: 500ms 
+    then:
+      - lambda: |-
+          float readings[4] = {
+            id(beacon_1).state,
+            id(beacon_2).state,
+            id(beacon_3).state,
+            id(beacon_4).state
+          };
+          
+          float max_rssi = -100.0; 
+          for (int i = 0; i < 4; i++) {
+            if (!isnan(readings[i])) {
+              if (readings[i] > max_rssi) { max_rssi = readings[i]; }
+            }
+          }
+          
+          int rads = 0;
+          if (max_rssi > -90) {
+            // Incorporates the dynamic fudge factor
+            rads = max_rssi + 90 + id(fudge_factor);
+          }
+          
+          if (rads < 0) rads = 0;
+          if (rads > 50) rads = 50;
+          
+          id(current_rads) = rads;
+
+          // 4. Print a clean, comprehensive summary to the log
+          // We use %.0f to format the floats without messy decimal places
+          ESP_LOGD("coproc", "B1:%.0f | B2:%.0f | B3:%.0f | B4:%.0f | MAX:%.0f --> RAD:%d", 
+                   readings[0], readings[1], readings[2], readings[3], max_rssi, rads);
+                   
+          // 5. Package and send just the Rads to the display!
+          char buffer[20];
+          sprintf(buffer, "RAD:%d\n", rads);
+          id(uart_data_bus).write_str(buffer);
+
+  # ---------------------------------------------------------
+  # LOOP 2: THE GEIGER CLICKER (Runs every 20ms)
+  # ---------------------------------------------------------
+  - interval: 20ms
+    then:
+      - lambda: |-
+          if (id(current_rads) > 0) {
+            int chance = 55 - id(current_rads);
+            
+            if (esp_random() % chance == 0) {
+              // Trigger the native ESPHome script instead of C++ timeouts!
+              id(geiger_click).execute();
+            }
+          }
+
+  # ---------------------------------------------------------
+  # LOOP 3: THE UART LISTENER (Runs every 100ms)
+  # ---------------------------------------------------------
+  - interval: 100ms
+    then:
+      - lambda: |-
+          static std::string line = "";
+          
+          while (id(uart_data_bus).available()) {
+            uint8_t c;
+            id(uart_data_bus).read_byte(&c);
+            
+            if (c == '\n') {
+              if (line.rfind("FUDGE:", 0) == 0) { 
+                int new_fudge = atoi(line.substr(6).c_str());
+                id(fudge_factor) = new_fudge;
+                ESP_LOGD("coproc", "Sensitivity Updated! New Fudge Factor: %d", new_fudge);
+              }
+              line = "";
+            } else {
+              line += (char)c;
+            }
+          }
