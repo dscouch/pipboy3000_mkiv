@@ -4,7 +4,7 @@
 #
 # Define your version string right here at the top!
 substitutions:
-  pip_version: "v1.2.2"
+  pip_version: "v1.2.3"
   dweller_id: "793"    #793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -25,11 +25,11 @@ esphome:
   min_version: 2025.11.0
   name_add_mac_suffix: false
 
-  on_boot:
-    # Priority -10 ensures the logger and screen are fully awake before printing
+on_boot:  # set up the boot screen and dump into to the logger
     priority: -10 
     then:
       - lambda: |-
+          id(boot_start_time) = millis(); // Record the start time
           ESP_LOGI("ROBCO", "=============================================");
           ESP_LOGI("ROBCO", " PIP-OS(R) V7.1.0.8 - COPYRIGHT ROBCO IND.");
           ESP_LOGI("ROBCO", " COMPILED FIRMWARE VERSION: %s", "${pip_version}");
@@ -157,6 +157,14 @@ animation:
 # MEMORY & VARIABLES
 # =========================================
 globals:
+  # Boot Screen globals
+  - id: show_boot_screen
+    type: bool
+    initial_value: 'true'
+    restore_value: no
+  - id: boot_start_time
+    type: uint32_t
+    initial_value: '0'
   # Navigation
   - id: active_main_tab
     type: int
@@ -469,6 +477,37 @@ display:
     #   height: 240
     update_interval: 50ms #set to 50ms for quick updates - reducing for load
     lambda: |-
+      // --- INSERT BOOT SEQUENCE HERE ---
+      if (id(show_boot_screen)) {
+          uint32_t elapsed = millis() - id(boot_start_time);
+          
+          it.fill(Color(0, 0, 0)); // Keep background black
+          
+          if (elapsed > 500) {
+              it.printf(10, 20, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM");
+              it.printf(10, 40, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "COPYRIGHT 2077 ROBCO(R)");
+          }
+          if (elapsed > 1500) {
+              it.printf(10, 80, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Pip-Boy 3000 Mark IV");
+              it.printf(10, 100, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Version %s", "${pip_version}");
+          }
+          if (elapsed > 3000) {
+              it.printf(10, 150, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Initializing Biometrics...");
+          }
+          if (elapsed > 4000) {
+              it.printf(10, 170, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Subject: Dweller %s", "${dweller_id}");
+          }
+          if (elapsed > 5000) {
+              it.printf(10, 210, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Biometrics Initialized.");
+          }
+          if (elapsed > 6500) {
+              // Time's up! Turn off the boot screen to reveal the main UI
+              id(show_boot_screen) = false; 
+          }
+          return; // This stops the rest of the UI from drawing while booting!
+      }
+      // --- END BOOT SEQUENCE ---
+      
       int w = 320;
       int h = 240;
       int main_y = 25;  
