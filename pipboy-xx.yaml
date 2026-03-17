@@ -492,15 +492,24 @@ display:
               it.printf(10, 100, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Version %s", "${pip_version}");
           }
           if (elapsed > 3000) {
-              it.printf(10, 150, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Initializing Biometrics...");
-          }
-          if (elapsed > 4000) {
-              it.printf(10, 170, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Subject: Dweller %s", "${dweller_id}");
+              it.printf(10, 150, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Mounting Holotape Drive...");
           }
           if (elapsed > 5000) {
+              it.printf(10, 170, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Checking geiger counter calibration...");
+          }
+          if (elapsed > 7000) {
+              it.printf(10, 210, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Verifying S.P.E.C.I.A.L. parameters...");
+          }
+          if (elapsed > 9000) {
+              it.printf(10, 150, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Initializing Biometrics...");
+          }
+          if (elapsed > 11000) {
+              it.printf(10, 170, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Subject: Dweller %s", "${dweller_id}");
+          }
+          if (elapsed > 13000) {
               it.printf(10, 210, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Biometrics Initialized.");
           }
-          if (elapsed > 6500) {
+          if (elapsed > 16000) {
               // Time's up! Turn off the boot screen to reveal the main UI
               id(show_boot_screen) = false; 
           }
