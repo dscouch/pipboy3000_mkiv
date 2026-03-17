@@ -491,13 +491,13 @@ display:
               it.printf(10, 80, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Pip-Boy 3000 Mark IV");
               it.printf(10, 100, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Version %s", "${pip_version}");
           }
-          if (elapsed > 3000) {
+          if (elapsed > 3000 && elapsed < 9000) {
               it.printf(10, 150, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Mounting Holotape Drive...");
           }
-          if (elapsed > 5000) {
+          if (elapsed > 5000 && elapsed < 9000) {
               it.printf(10, 170, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Checking geiger counter calibration...");
           }
-          if (elapsed > 7000) {
+          if (elapsed > 7000 && elapsed < 9000) {
               it.printf(10, 210, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Verifying S.P.E.C.I.A.L. parameters...");
           }
           if (elapsed > 9000) {
