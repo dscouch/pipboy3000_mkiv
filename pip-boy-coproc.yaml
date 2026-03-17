@@ -46,6 +46,12 @@ globals:
   - id: fudge_factor
     type: int
     initial_value: '0' 
+  - id: enable_speaker
+    type: bool
+    initial_value: 'true'
+  - id: enable_haptic
+    type: bool
+    initial_value: 'true'
 
 output:
   - platform: gpio
@@ -89,14 +95,15 @@ script:
   - id: geiger_click
     mode: restart
     then:
-      - logger.log: "FIRE: Triggering pins now!"
-      - output.turn_on: speaker_pin
-      - output.turn_on: haptic_pin
+      - lambda: |-
+          if (id(enable_speaker)) id(speaker_pin).turn_on();
+          if (id(enable_haptic)) id(haptic_pin).turn_on();
       - delay: 5ms
-      - output.turn_off: speaker_pin
-      # A massive 100ms thump to guarantee we overcome physical inertia
+      - lambda: |-
+          id(speaker_pin).turn_off();
       - delay: 100ms 
-      - output.turn_off: haptic_pin
+      - lambda: |-
+          id(haptic_pin).turn_off();
 
 interval:
   # ---------------------------------------------------------
@@ -166,12 +173,18 @@ interval:
           while (id(uart_data_bus).available()) {
             uint8_t c;
             id(uart_data_bus).read_byte(&c);
-            
             if (c == '\n') {
               if (line.rfind("FUDGE:", 0) == 0) { 
                 int new_fudge = atoi(line.substr(6).c_str());
                 id(fudge_factor) = new_fudge;
                 ESP_LOGD("coproc", "Sensitivity Updated! New Fudge Factor: %d", new_fudge);
+              }
+              // Add these two listeners:
+              else if (line.rfind("SND:", 0) == 0) {
+                id(enable_speaker) = (line.substr(4) == "1");
+              }
+              else if (line.rfind("HAP:", 0) == 0) {
+                id(enable_haptic) = (line.substr(4) == "1");
               }
               line = "";
             } else {
