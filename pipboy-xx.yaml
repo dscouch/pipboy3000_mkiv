@@ -25,7 +25,7 @@ esphome:
   min_version: 2025.11.0
   name_add_mac_suffix: false
 
-on_boot:  # set up the boot screen and dump into to the logger
+  on_boot:  # set up the boot screen and dump into to the logger
     priority: -10 
     then:
       - lambda: |-
