@@ -1,0 +1,20 @@
+# This file goes on a small esp32 for the purpose
+# of providing a BLE server to represent a radiation source
+esphome:
+  name: beacon-01-hex
+  friendly_name: Hex Puzzle Hazard
+
+esp32:
+  # This tells ESPHome to use the specific pinout and memory map for the XIAO
+  board: seeed_xiao_esp32c3
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+  # This forces the logs to route through the native USB-C port!
+  hardware_uart: USB_SERIAL_JTAG
+
+# Turns the board into an active Bluetooth hazard beacon
+esp32_ble_server:
