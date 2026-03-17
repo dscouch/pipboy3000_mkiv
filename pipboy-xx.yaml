@@ -1,0 +1,856 @@
+# Vault 27 Dweller XX Pip-boy yaml
+# This code can be used for either (any) vault dweller by reconfiguring the parameters
+# at the beginning.
+#
+# Define your version string right here at the top!
+substitutions:
+  pip_version: "v1.2.2"
+  dweller_id: "793"    #793 or 612
+  other_id: "612"
+  device_name: "pipboy-${dweller_id}"
+  friendly_name: "Vault Dweller ${dweller_id}"
+  # Define the data sets here
+  data_793_grid: &grid793 '{0x0, 0xD, 0x2, 0x1, 0xC, 0x9, 0x4, 0xA, 0x7, 0x8, 0x6, 0x5, 0xB, 0x3, 0xE, 0x0}'
+  data_612_grid: &grid612 '{0x0, 0x4, 0xF, 0xE, 0x5, 0x9, 0xD, 0x2, 0xA, 0x6, 0x1, 0x0, 0xB, 0xC, 0x7, 0x8}'
+  cell_793_lock: &lock793 '{true, false, false, false, false, true, false, false, false, false, true, false, false, false, false, true}'
+  cell_612_lock: &lock612 '{true, false, false, false, false, false, false, true, false, true, false, false, false, false, true, false}'
+  # >>> THE SINGLE PARAMETER <<<
+  # Point the active variable to the anchor you want
+  active_grid: *grid793 
+  active_lock: *lock793
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  min_version: 2025.11.0
+  name_add_mac_suffix: false
+
+  on_boot:
+    # Priority -10 ensures the logger and screen are fully awake before printing
+    priority: -10 
+    then:
+      - lambda: |-
+          ESP_LOGI("ROBCO", "=============================================");
+          ESP_LOGI("ROBCO", " PIP-OS(R) V7.1.0.8 - COPYRIGHT ROBCO IND.");
+          ESP_LOGI("ROBCO", " COMPILED FIRMWARE VERSION: %s", "${pip_version}");
+          ESP_LOGI("ROBCO", "=============================================");
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
+
+# =========================================
+# SYSTEM CONFIGURATION
+# =========================================
+logger:
+  # level: ERROR   # comment these out to debug uncomment to save space/buffer
+  # baud_rate: 0 # Frees up the UART buffer
+  level: DEBUG
+
+debug: 
+  update_interval: 5s
+
+api:
+  encryption:
+    key: !secret pipboy_api_key 
+  services:
+    - service: trigger_meltdown
+      then:
+        - lambda: |-
+            id(active_main_tab) = 0; // Force to STAT tab
+            id(active_sub_tab) = 0;  // Force to STATUS sub-tab
+            id(vault_hp) -= 50;      // Cut health
+            ESP_LOGW("pipboy", "OVERSEER INITIATED REACTOR MELTDOWN!");
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: .home 
+
+# =========================================
+# HARDWARE & PINS
+# =========================================
+output:
+  - platform: ledc
+    pin: GPIO27
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: Display Backlight
+    id: backlight
+    restore_mode: ALWAYS_ON
+
+switch:
+  - platform: gpio
+    pin: GPIO25
+    name: "Touchscreen Wake-Up"
+    id: touch_wake
+    restore_mode: ALWAYS_ON
+
+i2c:
+  sda: GPIO33
+  scl: GPIO32
+  scan: true
+
+spi:
+  - id: bus_a
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+    interface: hardware
+
+# Establish the listening bus
+uart:
+  id: uart_coproc
+  tx_pin: GPIO22 # The pin wired to the Co-Proc's RX (GPIO20)
+  rx_pin: GPIO35 # The pin wired to the Co-Proc's TX (GPIO21)
+  baud_rate: 9600
+
+# =========================================
+# ASSETS (FONTS, COLORS, ANIMATIONS)
+# =========================================
+
+font:
+  - file: "monofonto.otf"
+    id: pip_main_font
+    size: 24
+    glyphs: 
+      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+  - file: "monofonto.otf"
+    id: pip_sub_font
+    size: 18
+    glyphs:
+      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+      - 'Σ'
+
+color:
+  - id: pip_bright
+    red: 0%
+    green: 100%
+    blue: 0%
+  - id: pip_unselected
+    red: 0%
+    green: 60%
+    blue: 0%
+  - id: pip_line 
+    red: 0%
+    green: 20%
+    blue: 0%
+  - id: pip_alert
+    red: 0%
+    green: 0%
+    blue: 100%
+
+#commented out temporarily to save space and reduce suspicion
+animation:    
+  - file: "vaultboywalking2.gif" 
+    id: vault_boy_anim
+    type: RGB565 
+
+# =========================================
+# MEMORY & VARIABLES
+# =========================================
+globals:
+  # Navigation
+  - id: active_main_tab
+    type: int
+    restore_value: no
+    initial_value: '0' 
+  - id: active_sub_tab
+    type: int
+    restore_value: no
+    initial_value: '0' 
+
+  # hex grid settings  - comment these out for additional space
+  - id: hex_grid
+    type: int[16]
+    initial_value: ${active_grid}
+    # 793 solved_value: '{0xf, 0x2, 0x1, 0xC, 0x4, 0x9, 0xA, 0x7, 0x8, 0x5, 0x6, 0xB, 0x3, 0xE, 0xD, 0x0}'
+    # 612 solved_value: '{0x0, 0x8, 0x4, 0xF, 0xE, 0x5, 0x9, 0x2, 0xD, 0x6, 0xA, 0x1, 0x0, 0xB, 0x7, 0xC}'
+  - id: locked_cells
+    type: bool[16] # Changed from std::vector<bool>
+    initial_value: ${active_lock}
+
+  - id: target_sum
+    type: int
+    initial_value: '30' 
+  - id: data_solved
+    type: bool
+    initial_value: 'false'
+    restore_value: no
+  - id: input_direction
+    type: int
+    restore_value: no
+    initial_value: '1' # 1 for forward, -1 for backward
+
+  # RPG & Co-Op Variables
+  - id: vault_xp
+    type: int
+    initial_value: '0'
+    restore_value: yes 
+  - id: vault_hp
+    type: int
+    initial_value: '100'
+    restore_value: yes 
+  - id: meltdown_hold_time
+    type: int
+    initial_value: '0'
+    restore_value: no
+
+# =========================================
+# SENSORS & HOME ASSISTANT COMMUNICATORS
+# =========================================
+sensor:
+  # Send telemetry back to Overseer
+  - platform: template
+    name: "Pip-Boy HP"
+    id: telemetry_hp
+    icon: "mdi:heart-pulse"
+    unit_of_measurement: "HP"
+    accuracy_decimals: 0
+    lambda: 'return id(vault_hp);'
+    update_interval: 2s
+
+  - platform: template
+    name: "Pip-Boy XP"
+    id: telemetry_xp
+    icon: "mdi:star-shooting"
+    unit_of_measurement: "XP"
+    accuracy_decimals: 0
+    lambda: 'return id(vault_xp);'
+    update_interval: 2s
+
+  # track the radiation levels
+  - platform: template
+    name: "Pip-Boy Radiation Level"
+    id: current_rads
+    unit_of_measurement: "RAD"
+    accuracy_decimals: 0
+
+# Listens to HA to update Dwellers Top-Left cell  --  comment out if you need space
+  - platform: homeassistant
+    id: my_remote_cell_zero
+    entity_id: input_number.dweller_${dweller_id}_cell_zero
+    internal: true
+    on_value:
+      then:
+        - lambda: |-
+            id(hex_grid)[0] = (int)x;
+            id(check_puzzle_solved).execute();
+  # Reads Others current state so we can increment/decrement it
+  - platform: homeassistant
+    id: other_dweller_remote_cell
+    entity_id: input_number.dweller_${other_id}_cell_zero
+    internal: true
+
+  # Pull Reactor data from Overseer
+  - platform: homeassistant
+    id: reactor_coolant
+    entity_id: input_number.reactor_coolant
+    internal: true
+
+  - platform: homeassistant
+    id: reactor_rods
+    entity_id: input_number.reactor_rods
+    internal: true
+
+  # Pulls the live Rads from the Reactor Core scanner via Home Assistant =============================================
+  # - platform: homeassistant
+  #   id: radiation_sensor
+  #   entity_id: sensor.vault_27_reactor_scanner_01_dweller_793_radiation
+  #   internal: true
+
+  - platform: debug #debugging code
+    free:
+      name: "Pip-Boy Free Heap"
+    block:
+      name: "Pip-Boy Largest Free Block"
+    fragmentation:
+      name: "Pip-Boy Heap Fragmentation"
+
+binary_sensor:
+  - platform: homeassistant
+    id: meltdown_active
+    entity_id: input_boolean.reactor_meltdown_active
+    internal: true
+    on_press:
+      then:
+        - lambda: |-
+            id(active_main_tab) = 0; 
+            id(active_sub_tab) = 0;  
+            ESP_LOGW("pipboy", "EMERGENCY: MELTDOWN PROTOCOL INITIATED");
+
+text_sensor:
+  - platform: homeassistant
+    id: manual_text
+    entity_id: sensor.pip_boy_${dweller_id}_manual_text
+    internal: true
+
+# =========================================
+# SCRIPTS & AUTOMATIONS
+# =========================================
+
+script:
+  # Pushes Co-Op touch events to HA
+  - id: set_ha_coolant
+    parameters:
+      val: int
+    then:
+      - homeassistant.service:
+          service: input_number.set_value
+          data:
+            entity_id: input_number.reactor_coolant
+            value: !lambda 'return val;'
+
+  - id: set_ha_rods
+    parameters:
+      val: int
+    then:
+      - homeassistant.service:
+          service: input_number.set_value
+          data:
+            entity_id: input_number.reactor_rods
+            value: !lambda 'return val;'
+
+  - id: next_page_btn
+    then:
+      - lambda: 'ESP_LOGD("pipboy", "Firing NEXT PAGE script to HA");'
+      - homeassistant.service:
+          service: input_number.increment
+          data:
+            entity_id: input_number.pipboy_${dweller_id}_manual_page
+
+  - id: prev_page_btn
+    then:
+      - lambda: 'ESP_LOGD("pipboy", "Firing PREV PAGE script to HA");'
+      - homeassistant.service:
+          service: input_number.decrement
+          data:
+            entity_id: input_number.pipboy_${dweller_id}_manual_page
+
+# The script fired by tapping the Mystery Cell
+  - id: change_other_dweller_cell
+    then:
+      - lambda: |-
+          if (id(other_dweller_remote_cell).has_state()) {
+            int current = id(other_dweller_remote_cell).state;
+            ESP_LOGD("pipboy", "Current remote cell state: %d", current);
+            
+            current += id(input_direction);
+            
+            if (current > 15) current = 0;
+            if (current < 0) current = 15;
+            
+            ESP_LOGD("pipboy", "Attempting to set remote cell to: %d", current);
+            id(set_ha_remote_cell).execute(current);
+          } else {
+            ESP_LOGW("pipboy", "Remote cell sensor does not have a state yet!");
+          }
+          
+  - id: set_ha_remote_cell
+    parameters:
+      val: int
+    then:
+      - homeassistant.service:
+          service: input_number.set_value
+          data:
+            entity_id: input_number.dweller_${other_id}_cell_zero
+            value: !lambda 'return val;'
+
+  # Evaluates the Hex Matrix for a win
+  - id: check_puzzle_solved
+    then:
+      - lambda: |-
+          int target = id(target_sum);
+          bool all_match = true;
+          for(int i=0; i<4; i++) {
+            int rs=0, cs=0;
+            for(int j=0; j<4; j++) {
+              rs += id(hex_grid)[i*4+j];
+              cs += id(hex_grid)[j*4+i];
+            }
+            if(rs != target || cs != target) all_match = false;
+          }
+          int bitmask = 0;
+          bool unique = true;
+          for(int v : id(hex_grid)) {
+            if((bitmask & (1 << v)) != 0) { unique = false; break; }
+            bitmask |= (1 << v);
+          }
+          if (all_match && unique) { 
+            id(data_solved) = true;
+            id(vault_xp) += 1000;
+          }
+      - if:
+          condition: 
+            lambda: 'return id(data_solved);'
+          then:
+            - homeassistant.service:
+                service: input_boolean.turn_on
+                data:
+                  entity_id: input_boolean.data_puzzle_complete
+
+interval:
+  # The Reactor Meltdown Core Loop
+  - interval: 1s
+    id: meltdown_logic_loop
+    then:
+      - if:
+          condition: 
+            lambda: 'return id(meltdown_active).state;'
+          then:
+            - lambda: |-
+                int temp = (id(reactor_rods).state - id(reactor_coolant).state) + 100;
+                if (temp == 85) { id(meltdown_hold_time) += 1; } 
+                else { id(meltdown_hold_time) = 0; }
+            - if:
+                condition: 
+                  lambda: 'return id(meltdown_hold_time) >= 5;'
+                then:
+                  - lambda: |-
+                      id(vault_xp) += 2500;
+                      id(meltdown_hold_time) = 0;
+                  - homeassistant.service:
+                      service: input_boolean.turn_off
+                      data:
+                        entity_id: input_boolean.reactor_meltdown_active
+
+# serial listener loop, modified to catch RADs
+  - interval: 100ms
+    then:
+      - lambda: |-
+          static std::string line = "";
+          
+          while (id(uart_coproc).available()) {
+            uint8_t c;
+            id(uart_coproc).read_byte(&c);
+            
+            if (c == '\n') {
+              // If the message starts with "RAD:"
+              if (line.rfind("RAD:", 0) == 0) { 
+                // Slice off the number (starts at index 4)
+                int rads = atoi(line.substr(4).c_str());
+                
+                // Publish it to our virtual sensor!
+                id(current_rads).publish_state(rads);
+                
+                // Print it to the display's own USB log so we can verify
+                ESP_LOGD("main_display", "Geiger Update: %d RADS", rads);
+              }
+              line = "";
+            } else {
+              line += (char)c;
+            }
+          }
+
+# =========================================
+# DISPLAY & UI RENDERING
+# =========================================
+display:
+  - platform: ili9xxx
+    id: my_display
+    model: ILI9341
+    color_order: BGR  # Add this line to fix the Red/Blue swap
+    spi_id: bus_a
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    auto_clear_enabled: true
+    invert_colors: false
+    color_palette: 8BIT
+    rotation: 90
+    # dimensions: 
+    #   width: 320
+    #   height: 240
+    update_interval: 50ms #set to 50ms for quick updates - reducing for load
+    lambda: |-
+      int w = 320;
+      int h = 240;
+      int main_y = 25;  
+      int sub_y = 55;   
+
+      it.fill(Color(0, 0, 0));
+
+      // Define a reusable Radiation Symbol function
+      auto draw_rad_symbol = [&](int x, int y, int radius, Color c) {
+          // A. Solid base circle
+          it.filled_circle(x, y, radius, c);
+
+          // B. Erase the three 60-degree gaps with black triangles
+          float gaps[3][2] = {
+              {0.0, 1.047},       // Bottom right
+              {2.094, 3.141},     // Bottom left
+              {4.188, 5.236}      // Top
+          };
+          for (int i = 0; i < 3; i++) {
+              int p1_x = x + (int)((radius + 3) * cos(gaps[i][0]));
+              int p1_y = y + (int)((radius + 3) * sin(gaps[i][0]));
+              int p2_x = x + (int)((radius + 3) * cos(gaps[i][1]));
+              int p2_y = y + (int)((radius + 3) * sin(gaps[i][1]));
+              it.filled_triangle(x, y, p1_x, p1_y, p2_x, p2_y, Color(0, 0, 0));
+          }
+          // B+. Solid outside circle
+          it.circle(x, y, radius, c);
+
+          // C. Erase inner gap (Standard is 30% of total radius)
+          int inner_gap = (int)(radius * 0.3);
+          if (inner_gap < 2) inner_gap = 2; // enforce minimum size
+          it.filled_circle(x, y, inner_gap, c);
+
+          // D. Draw core dot (Standard is 20% of total radius)
+          int core_dot = (int)(radius * 0.2);
+          if (core_dot < 1) core_dot = 1;
+          it.filled_circle(x, y, core_dot, Color(0, 0, 0));
+      };
+
+      // MAIN MENU NAVIGATION
+      const char* main_labels[] = {"STAT", "INV", "DATA", "MAP"}; //Bonus add radio later
+      int main_x_pos[] = {40, 100, 220, 280};  //160 = center point
+
+      for (int i = 0; i < 4; i++) {
+        Color draw_color = (id(active_main_tab) == i) ? id(pip_bright) : id(pip_unselected);
+        it.printf(main_x_pos[i], main_y, id(pip_main_font), draw_color, TextAlign::CENTER, main_labels[i]);
+
+        if (id(active_main_tab) == i) {
+          int bw = 25, bh = 12, cx = main_x_pos[i];
+          it.line(cx-bw-5, main_y-bh, cx-bw-5, main_y+bh, id(pip_bright));
+          it.line(cx+bw+5, main_y-bh, cx+bw+5, main_y+bh, id(pip_bright));
+          it.line(cx-bw-5, main_y-bh, cx-bw, main_y-bh, id(pip_bright));
+          it.line(cx+bw, main_y-bh, cx+bw+5, main_y-bh, id(pip_bright));
+          it.line(0, main_y+bh, cx-bw-5, main_y+bh, id(pip_unselected));
+          it.line(cx+bw+5, main_y+bh, w, main_y+bh, id(pip_unselected));
+        }
+      }
+
+      // 1. STAT TAB RENDERING (Vault Boy, Meltdown, & Radiation)
+      if (id(active_main_tab) == 0) {
+        if (id(meltdown_active).state && id(active_sub_tab) == 0) {
+          
+          // A. MELTDOWN EMERGENCY UI   ==============================
+          int c = id(reactor_coolant).state;
+          int r = id(reactor_rods).state;
+          int temp = (r - c) + 100;
+          
+          // Flash a massive RED radiation symbol in the center!
+          if ((millis() / 500) % 2 == 0) {
+              it.printf(160, 50, id(pip_main_font), id(pip_alert), TextAlign::CENTER, "WARNING: CORE INSTABILITY");
+              
+              // Draw a huge 35-pixel radius symbol right between the text and the sliders
+              draw_rad_symbol(160, 100, 35, id(pip_alert)); 
+          }
+          
+          it.printf(10, 195, id(pip_sub_font), id(pip_bright), TextAlign::CENTER_LEFT, "CORE TEMP: %d%%", temp);
+          
+          if (temp == 85) it.printf(160, 195, id(pip_sub_font), id(pip_bright), TextAlign::CENTER, "- STABILIZING: %d/5 -", id(meltdown_hold_time));
+          else it.printf(310, 195, id(pip_sub_font), id(pip_unselected), TextAlign::CENTER_RIGHT, "TEMP: 85%%");
+
+          it.printf(80, 140, id(pip_sub_font), id(pip_unselected), TextAlign::CENTER, "COOLANT");
+          it.rectangle(30, 160, 100, 20, id(pip_line));
+          it.filled_rectangle(30, 160, c, 20, id(pip_bright)); 
+
+          it.printf(240, 140, id(pip_sub_font), id(pip_unselected), TextAlign::CENTER, "RODS");
+          it.rectangle(190, 160, 100, 20, id(pip_line));
+          it.filled_rectangle(190, 160, r, 20, id(pip_bright)); 
+        } else {
+          // B. NORMAL STATUS SCREEN  ==============================
+          int vb_x = 125;  // animation location
+          int vb_y = 70;
+          // Vaultboy!!
+          //it.rectangle(vb_x,vb_y, 71, 120, id(pip_line)); //replace vaultboy with box (or just a small image)
+          id(vault_boy_anim).next_frame();   //reenable vaultboy when we have the better device (in larger format)
+          it.image(vb_x, vb_y, id(vault_boy_anim)); 
+
+          // C. DRAW THE NATIVE RADIATION METER (Analog Radial Gauge)
+          if (id(active_sub_tab) == 0) {
+            
+            // Pull the live value from our new UART template sensor!
+            float rads = id(current_rads).state;
+
+            // Check if the sensor is 'nan' or 'unavailable'
+            if (std::isnan(rads)) {
+              rads = 0.0; 
+            }
+            
+            if (rads > 50.0) rads = 50.0;
+            if (rads < 0.0) rads = 0.0;
+
+            // 1. Gauge Setup
+             int cx = 318;      // Center X (Off-screen to the right)
+             int cy = 120;      // Center Y (Middle of the vertical space)
+             int radius = 60;   // Size of the half-circle
+             int needle_len = 55; // Slightly shorter than the radius
+
+            // Calculate Angles for a full 180-degree left-facing sweep
+             float start_angle = 1.571;  // Pointing straight down (0 Rads)
+             float end_angle = 4.712;   // Pointing straight up (50 Rads)
+
+             // 2. Draw the Gauge Background
+             for(int r_offset = 0; r_offset < 3; r_offset++) {
+                 it.circle(cx, cy, radius - r_offset, id(pip_line));
+             }
+
+             // 3. DRAW THE TICKS (10, 20, 30, 40)
+             int tick_inner_radius = radius - 8; // How deep the tick cuts in
+             int tick_outer_radius = radius;     // Where the tick ends
+
+             for (int tick_val = 10; tick_val <= 40; tick_val += 10) {
+                 // Find the angle for this specific tick
+                 float t_angle = start_angle + ((tick_val / 50.0) * (end_angle - start_angle));
+
+                 // Calculate inner and outer X/Y points
+                 int in_x = cx + (int)(tick_inner_radius * cos(t_angle));
+                 int in_y = cy + (int)(tick_inner_radius * sin(t_angle));
+                 int out_x = cx + (int)(tick_outer_radius * cos(t_angle));
+                 int out_y = cy + (int)(tick_outer_radius * sin(t_angle));
+
+                 // Draw the tick mark
+                 it.line(in_x, in_y, out_x, out_y, id(pip_unselected));
+             }
+
+             // 4. Calculate Needle Tip Coordinates
+             float angle = start_angle + ((rads / 50.0) * (end_angle - start_angle));
+             int tip_x = cx + (int)(needle_len * cos(angle));
+             int tip_y = cy + (int)(needle_len * sin(angle));
+
+             // 5. Draw the Needle
+             it.line(cx, cy, tip_x, tip_y, id(pip_bright));
+             // Make the needle slightly thicker at the base
+             it.line(cx, cy-1, tip_x, tip_y, id(pip_bright));
+             it.line(cx, cy+1, tip_x, tip_y, id(pip_bright));
+             // Optional: Draw a small "hub" at the center if you move it slightly on-screen
+             it.filled_circle(cx, cy, 5, id(pip_bright));
+
+             // 6. Draw Text Labels
+             it.printf(275, 55, id(pip_sub_font), id(pip_bright), TextAlign::TOP_RIGHT, "RADS");
+             it.printf(318, 80, id(pip_sub_font), id(pip_bright), TextAlign::TOP_RIGHT, "%.1f", rads);
+
+            // 7. Draw Accurate Radioactive Symbol (Lower inner area)
+             draw_rad_symbol(265, 180, 16, id(pip_bright));
+          }
+
+          // D. VERTICAL SUB-MENU (Fallout 4 Style)
+          const char* sub_labels[] = {"STATUS", "SPECIAL", "PERKS"};
+          int sub_x = 5;                   // Anchored to the left edge
+          int sub_y_strt = 80;
+          int sub_y_pos[] = {sub_y_strt, sub_y_strt+40, sub_y_strt+80}; // Stacked vertically
+          for (int i = 0; i < 3; i++) {
+            Color sub_color = (id(active_sub_tab) == i) ? id(pip_bright) : id(pip_unselected);
+            
+            // Add a classic Pip-Boy selection arrow for the active tab
+            if (id(active_sub_tab) == i) {
+              it.printf(sub_x, sub_y_pos[i], id(pip_sub_font), sub_color, TextAlign::CENTER_LEFT, "> %s", sub_labels[i]);
+            } else {
+              it.printf(sub_x, sub_y_pos[i], id(pip_sub_font), sub_color, TextAlign::CENTER_LEFT, "  %s", sub_labels[i]);
+            }
+          }          
+        }
+      }
+
+      // 2. INV TAB RENDERING
+      if (id(active_main_tab) == 1) {
+      }
+
+      // 3. DATA TAB RENDERING
+      if (id(active_main_tab) == 2) {
+        //comment out
+        if (id(data_solved)) {
+          it.printf(160, 70, id(pip_main_font), id(pip_bright), TextAlign::CENTER, "MEMORY CORE RESTORED");
+          it.line(60, 120, 260, 120, id(pip_bright)); 
+          it.printf(160, 140, id(pip_sub_font), id(pip_bright), TextAlign::CENTER, "PARITY MATCH ACCEPTED");
+        } else {
+          it.printf(160, 50, id(pip_main_font), id(pip_bright), TextAlign::CENTER, "MEMORY CORE REPAIR");
+          int start_x = 60, start_y = 80, cell_w = 50, cell_h = 25;  //x=60, y=80, w=50, h=25
+          int counts[16] = {0};
+          for (int v : id(hex_grid)) counts[v]++;
+
+          for (int r = 0; r < 4; r++) {
+            for (int c = 0; c < 4; c++) {
+              int idx = r * 4 + c;
+              int val = id(hex_grid)[idx];
+              if (counts[val] > 1) {
+                it.filled_rectangle(start_x+(c*cell_w), start_y+(r*cell_h), cell_w-4, cell_h-4, id(pip_unselected));
+                it.printf(start_x+(c*cell_w)+23, start_y+(r*cell_h), id(pip_sub_font), Color(0,0,0), TextAlign::TOP_CENTER, "%02X", val);
+              } else {
+                it.rectangle(start_x+(c*cell_w), start_y+(r*cell_h), cell_w-4, cell_h-4, id(pip_line));
+                Color txt_col = id(locked_cells)[idx] ? id(pip_unselected) : id(pip_bright);
+                it.printf(start_x+(c*cell_w)+23, start_y+(r*cell_h), id(pip_sub_font), txt_col, TextAlign::TOP_CENTER, "%02X", val);
+              }
+              if (id(locked_cells)[idx]) it.filled_rectangle(start_x+(c*cell_w)+2, start_y+(r*cell_h)+2, 3, 3, id(pip_unselected));
+            }
+          }
+          it.printf(160, 198, id(pip_sub_font), id(pip_bright), TextAlign::CENTER, "TARGET PARITY: %02X", id(target_sum));
+          // Draw the Direction Toggle Button
+          int toggle_x = 260, toggle_y = 180, toggle_w = 50-4, toggle_h = 25-4;
+          it.rectangle(toggle_x, toggle_y, toggle_w, toggle_h, id(pip_line));
+
+          // Change label based on direction
+          const char* dir_label = (id(input_direction) == 1) ? "+" : "-";
+          // Change the toggle color from green to our red when decrementing
+          Color toggle_col = (id(input_direction) == 1) ? id(pip_bright) : id(pip_alert);
+          it.printf(toggle_x + (toggle_w/2), toggle_y, id(pip_sub_font), toggle_col, TextAlign::TOP_CENTER, dir_label);
+
+          // Draw the Mystery Transmit Cell (Lower Left)
+          // Grid starts at x=60, ends at x=260. We'll align this with the left edge.
+          int myst_x = 10, myst_y = 180, myst_w = 50-4, myst_h = 25-4;
+          it.rectangle(myst_x, myst_y, myst_w, myst_h, id(pip_line));
+
+          // Grab the current value of the other player's HA helper
+          int send_val = 0;
+          if (id(other_dweller_remote_cell).has_state()) {
+            send_val = id(other_dweller_remote_cell).state;
+          }
+          // Print it in the alert red so it stands out slightly from the green puzzle x=10 y=180 w=50 h=25
+          it.printf(myst_x + (myst_w/2), myst_y, id(pip_sub_font), id(pip_bright), TextAlign::TOP_CENTER, "%02X", send_val);
+        }
+        //--> to here
+      }
+
+      // 4. MAP TAB RENDERING
+      if (id(active_main_tab) == 3) {
+        it.printf(310, 30, id(pip_main_font), id(pip_bright), TextAlign::TOP_RIGHT, "MANUALS");
+        it.printf(10, 30, id(pip_main_font), id(pip_unselected), TextAlign::TOP_LEFT, "LOCATION");
+        it.rectangle(5, 60, 310, 115, id(pip_line));
+        
+        if (id(manual_text).has_state()) {
+          // Grab the text from HA using standard C++ string
+          std::string text = id(manual_text).state; 
+          int line_y = 70; 
+          size_t start_idx = 0;
+          size_t end_idx = text.find('~');
+          
+          // Loop through and chop the string every time we see a '~'
+          while (end_idx != std::string::npos) {
+            std::string line = text.substr(start_idx, end_idx - start_idx);
+            it.printf(15, line_y, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "%s", line.c_str());
+            line_y += 18; // Drop down 18 pixels
+            start_idx = end_idx + 1;
+            end_idx = text.find('~', start_idx);
+          }
+          // Print whatever is left after the last '~'
+          std::string last_line = text.substr(start_idx);
+          it.printf(15, line_y, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "%s", last_line.c_str());
+          
+        } else {
+            it.printf(160, 110, id(pip_sub_font), id(pip_unselected), TextAlign::CENTER, "NO SIGNAL...");
+        }
+
+        // Draw PREV / NEXT buttons
+        int btn_w = 70, btn_h = 25, btn_y = 175;
+        it.rectangle(10, btn_y, btn_w, btn_h, id(pip_line));
+        it.printf(10 + (btn_w/2), btn_y + 3, id(pip_sub_font), id(pip_bright), TextAlign::TOP_CENTER, "< PREV");
+        
+        it.rectangle(240, btn_y, btn_w, btn_h, id(pip_line));
+        it.printf(240 + (btn_w/2), btn_y + 3, id(pip_sub_font), id(pip_bright), TextAlign::TOP_CENTER, "NEXT >");
+      }
+
+      // 5. RADIO TAB RENDERING == reenable for a stretch goal (but probably not)
+      // if (id(active_main_tab) == 4) {
+      //}
+
+      // 6. FOOTER
+      it.line(0, 210, w, 210, id(pip_line));
+      it.printf(10, 212, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "HP %d/100", id(vault_hp));
+      it.printf(w - 10, 212, id(pip_sub_font), id(pip_bright), TextAlign::TOP_RIGHT, "XP %d", id(vault_xp));
+
+# =========================================
+# TOUCHSCREEN CONTROLS
+# =========================================
+touchscreen:
+  platform: cst816 
+  id: my_touchscreen
+  display: my_display     # <--- Links the touch matrix to your screen!
+  # Notice there is NO interrupt_pin here!
+  calibration:
+      x_min: 0
+      x_max: 320
+      y_min: 65
+      y_max: 230
+
+  transform:
+    swap_xy: true 
+    mirror_x: false
+    mirror_y: true
+
+  on_touch:
+    - logger.log:
+        format: "Touch registered at X: %d, Y: %d"
+        args: ['touch.x', 'touch.y']
+    - lambda: |-
+        if (touch.y < 38) {    
+          if (touch.x < 75) id(active_main_tab) = 0;
+          else if (touch.x < 135) id(active_main_tab) = 1;
+          else if (touch.x > 195 && touch.x < 255) id(active_main_tab) = 2;
+          else id(active_main_tab) = 3; 
+        } //removed tab 4 (Radio)
+
+        // STAT
+
+        // INV
+
+        // DATA
+        if (id(active_main_tab) == 2) { 
+          //comment out-->
+          int sx = 60, sy = 80, cw = 50, ch = 25;
+
+          // Check for Grid Taps
+          if (touch.x >= sx && touch.x <= sx+200 && touch.y >= sy && touch.y <= sy+100) {
+            int idx = ((touch.y - sy) / ch) * 4 + ((touch.x - sx) / cw);
+            if (idx >= 0 && idx < 16 && !id(locked_cells)[idx]) {
+              
+              // APPLY DIRECTIONAL MATH
+              int current_val = id(hex_grid)[idx];
+              current_val += id(input_direction);
+
+              // Handle wrapping 0 <-> F
+              if (current_val > 15) current_val = 0;
+              if (current_val < 0) current_val = 15;
+
+              id(hex_grid)[idx] = current_val;
+              id(check_puzzle_solved).execute();
+            }
+          }
+
+          // Check for Direction Toggle Tap (Matching the coordinates from display)
+          if (touch.x >= 260 && touch.x <= 310 && touch.y >= 185 && touch.y <= 210) {
+            id(input_direction) *= -1; // Flip between 1 and -1
+          }
+
+          // Check for Mystery Transmit Cell Tap  x=10 y=210 w=50 h=25
+          if (touch.x >= 10 && touch.x <= 60 && touch.y >= 180 && touch.y <= 210) {
+            id(change_other_dweller_cell).execute();
+          }
+          //-->to here
+        }
+
+        // MAP
+        if (id(active_main_tab) == 3) {
+          int btn_y = 175, btn_h = 25;
+          // PREV Button Hitbox (x: 10 to 80)
+          if (touch.x >= 10 && touch.x <= 80 && touch.y >= btn_y && touch.y <= btn_y + btn_h) {
+            ESP_LOGD("pipboy", "TOUCH DETECTED: PREV BUTTON");
+            id(prev_page_btn).execute();
+          }
+          // NEXT Button Hitbox (x: 240 to 310)
+          if (touch.x >= 240 && touch.x <= 310 && touch.y >= btn_y && touch.y <= btn_y + btn_h) {
+            ESP_LOGD("pipboy", "TOUCH DETECTED: NEXT BUTTON");
+            id(next_page_btn).execute();
+          }
+        }
+        // RADIO  ==   Stretch goal
+
+        // MELTDOWN
+        if (id(active_main_tab) == 0 && id(active_sub_tab) == 0 && id(meltdown_active).state) {
+          if (touch.x >= 30 && touch.x <= 130 && touch.y >= 140 && touch.y <= 200) {
+            int nv = ((touch.x - 30) / 5) * 5; 
+            if (nv != (int)id(reactor_coolant).state) id(set_ha_coolant).execute(nv);
+          }
+          if (touch.x >= 190 && touch.x <= 290 && touch.y >= 140 && touch.y <= 200) {
+            int nv = ((touch.x - 190) / 5) * 5; 
+            if (nv != (int)id(reactor_rods).state) id(set_ha_rods).execute(nv);
+          }
+        }
