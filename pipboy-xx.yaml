@@ -196,6 +196,13 @@ globals:
     type: int
     restore_value: no
     initial_value: '1' # 1 for forward, -1 for backward
+  # enable the speaker and haptic controls
+  - id: ui_enable_speaker
+    type: bool
+    initial_value: 'true'
+  - id: ui_enable_haptic
+    type: bool
+    initial_value: 'true'
 
   # RPG & Co-Op Variables
   - id: vault_xp
@@ -681,6 +688,46 @@ display:
              draw_rad_symbol(265, 180, 16, id(pip_bright));
           }
 
+          // D. VERTICAL SUB-MENU (Fallout 4 Style)
+          const char* sub_labels[] = {"STATUS", "SPECIAL", "CONFIG"}; 
+          int sub_x = 5;                   
+          int sub_y_strt = 80;
+          int sub_y_pos[] = {sub_y_strt, sub_y_strt+40, sub_y_strt+80}; 
+
+          // Draw the menu labels
+          for (int i = 0; i < 3; i++) {
+            Color item_col = (id(active_sub_tab) == i) ? id(pip_bright) : id(pip_unselected);
+            it.printf(sub_x, sub_y_pos[i], id(pip_main_font), item_col, TextAlign::TOP_LEFT, "%s", sub_labels[i]);
+          }
+
+          // Draw the selector arrow next to the active tab
+          it.print(sub_x + 90, sub_y_pos[id(active_sub_tab)], id(pip_main_font), id(pip_bright), TextAlign::TOP_LEFT, "<");
+
+          // Render the content for the selected sub-tab
+          if (id(active_sub_tab) == 0) {
+            // ... (Keep your existing STATUS / Radiation Gauge drawing code here) ...
+            
+          } else if (id(active_sub_tab) == 1) {
+            // ... (Keep your existing SPECIAL drawing code here) ...
+            
+          } else if (id(active_sub_tab) == 2) {
+            // CONFIG MENU UI
+            it.printf(160, 50, id(pip_main_font), id(pip_bright), TextAlign::CENTER, "SYSTEM CONFIGURATION");
+
+            // Sound Toggle Rendering
+            const char* snd_state = id(ui_enable_speaker) ? "[ON ]" : "[OFF]";
+            Color snd_col = id(ui_enable_speaker) ? id(pip_bright) : id(pip_unselected);
+            it.printf(120, 100, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "GEIGER AUDIO:");
+            it.printf(280, 100, id(pip_sub_font), snd_col, TextAlign::TOP_LEFT, "%s", snd_state);
+            it.rectangle(275, 95, 50, 25, id(pip_line)); 
+
+            // Haptic Toggle Rendering
+            const char* hap_state = id(ui_enable_haptic) ? "[ON ]" : "[OFF]";
+            Color hap_col = id(ui_enable_haptic) ? id(pip_bright) : id(pip_unselected);
+            it.printf(120, 140, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "HAPTIC MOTOR:");
+            it.printf(280, 140, id(pip_sub_font), hap_col, TextAlign::TOP_LEFT, "%s", hap_state);
+            it.rectangle(275, 135, 50, 25, id(pip_line)); 
+          }
           // D. VERTICAL SUB-MENU (Fallout 4 Style)
           const char* sub_labels[] = {"STATUS", "SPECIAL", "PERKS"};
           int sub_x = 5;                   // Anchored to the left edge
