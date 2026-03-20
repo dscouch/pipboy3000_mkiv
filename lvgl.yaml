@@ -145,12 +145,6 @@ animation:
     id: anim_vault_boy
     type: RGB565
 
-
-
-
-
-
-
 # ==========================================
 lvgl:
   displays:
@@ -214,7 +208,7 @@ lvgl:
               text_color: pip_unselected
               text_font: pip_main_font
               items:
-                selected:
+                checked:
                   bg_color: pip_line # Dark green box around the active tab
                   text_color: pip_bright
             tabs:
