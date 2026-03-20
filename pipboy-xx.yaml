@@ -1,18 +1,26 @@
-# Vault 27 Dweller XX Pip-boy yaml - S3 High-Res Edition
+# =========================================
+# DWELLER IDENTITY & SECRETS
+# =========================================
 substitutions:
-  pip_version: "v2.0.0-S3"
-  dweller_id: "793"    #793 or 612
+  pip_version: "v2.0.0-LVGL"
+  dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
   friendly_name: "Vault Dweller ${dweller_id}"
   
+  # Hex Puzzle Arrays
   data_793_grid: &grid793 '{0x0, 0xD, 0x2, 0x1, 0xC, 0x9, 0x4, 0xA, 0x7, 0x8, 0x6, 0x5, 0xB, 0x3, 0xE, 0x0}'
   data_612_grid: &grid612 '{0x0, 0x4, 0xF, 0xE, 0x5, 0x9, 0xD, 0x2, 0xA, 0x6, 0x1, 0x0, 0xB, 0xC, 0x7, 0x8}'
   cell_793_lock: &lock793 '{true, false, false, false, false, true, false, false, false, false, true, false, false, false, false, true}'
   cell_612_lock: &lock612 '{true, false, false, false, false, false, false, true, false, true, false, false, false, false, true, false}'
   
+  # ACTIVE DWELLER SELECTOR
   active_grid: *grid793 
   active_lock: *lock793
+
+# =========================================
+# ESPHOME 
+# =========================================
 
 esphome:
   name: ${device_name}
@@ -33,6 +41,8 @@ esphome:
 esp32:
   board: esp32-s3-devkitc-1
   variant: esp32s3
+  # This is the ONE and ONLY place this command is allowed to exist
+  flash_size: 16MB
   framework:
     type: esp-idf
     sdkconfig_options:
@@ -40,7 +50,7 @@ esp32:
       CONFIG_ESP32S3_DATA_CACHE_64KB: y
       CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
       CONFIG_SPIRAM_RODATA: y
-
+     
 psram:
   mode: octal
   speed: 80MHz
@@ -48,18 +58,62 @@ psram:
 logger:
   level: DEBUG
   hardware_uart: USB_SERIAL_JTAG
-
+# =========================================
+# HOME ASSISTANT CONNECTION
+# =========================================
+# (Ensure your secrets.yaml has these defined!)
 api:
   encryption:
     key: !secret pipboy_api_key 
-
-ota:
-  - platform: esphome
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   domain: .home 
+
+ota:
+  - platform: esphome
+
+debug: 
+  update_interval: 5s
+# =========================================
+# RPG & PUZZLE STATE (GLOBALS)
+# =========================================
+globals:
+  # Memory Core Puzzle
+  - id: hex_grid
+    type: int[16]
+    initial_value: ${active_grid}
+  - id: locked_cells
+    type: bool[16] 
+    initial_value: ${active_lock}
+  - id: target_sum
+    type: int
+    initial_value: '30' 
+  - id: data_solved
+    type: bool
+    initial_value: 'false'
+    restore_value: no
+  - id: input_direction
+    type: int
+    restore_value: no
+    initial_value: '1' # 1 for forward (+), -1 for backward (-)
+    
+  # RPG Stats
+  - id: vault_xp
+    type: int
+    initial_value: '0'
+    restore_value: yes 
+  - id: vault_hp
+    type: int
+    initial_value: '100'
+    restore_value: yes 
+    
+  # Reactor Meltdown Status
+  - id: meltdown_hold_time
+    type: int
+    initial_value: '0'
+    restore_value: no
 
 # =========================================
 # HARDWARE & BUSES
@@ -76,7 +130,13 @@ i2c:
     scan: true
     id: bus_a
 
-# The Coprocessor UART Bus 
+interval:
+  # The Animation Clock
+  - interval: 100ms # Decrease to 50ms to make him walk faster!
+    then:
+      - animation.next_frame: anim_vault_boy
+
+# The Coprocessor UART Bus ====================================================
 # (Pins mapped to available headers since the S3 Edge pins changed)
 uart:
   id: uart_coproc
@@ -84,22 +144,54 @@ uart:
   rx_pin: GPIO11  
   baud_rate: 9600
 
-# =========================================
-# ASSETS (SCALED FOR 5-INCH)
-# =========================================
-font:
-  - file: "monofonto.otf"
-    id: pip_main_font
-    size: 48 # Doubled from 24
-    glyphs: 
-      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
-  - file: "monofonto.otf"
-    id: pip_sub_font
-    size: 36 # Doubled from 18
-    glyphs:
-      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
-      - 'Σ'
+# --- THE DISPLAY HARDWARE ---
+# Notice there is no lambda here anymore! LVGL takes control.
+# Size of visible display is 600x480 starting at x=200
+display:
+  - platform: rpi_dpi_rgb
+    id: my_display
+    dimensions:
+      width: 800
+      height: 480
+    pclk_frequency: 15MHz
+    hsync_pulse_width: 1
+    hsync_back_porch: 42
+    hsync_front_porch: 20
+    vsync_pulse_width: 10
+    vsync_back_porch: 12
+    vsync_front_porch: 4
+    pclk_inverted: true
+    color_order: rgb
+    de_pin: GPIO40
+    hsync_pin: GPIO39
+    vsync_pin: GPIO41
+    pclk_pin: GPIO42
+    data_pins:
+      blue: [GPIO8, GPIO3, GPIO46, GPIO9, GPIO1]
+      green: [GPIO5, GPIO6, GPIO7, GPIO15, GPIO16, GPIO4]
+      red: [GPIO45, GPIO48, GPIO47, GPIO21, GPIO14]
 
+touchscreen:
+  - platform: gt911
+    display: my_display
+    id: my_touch
+    # Explicitly lock in the address we found in your log
+    address: 0x5D 
+    # Keep the reset pin so it boots cleanly
+    reset_pin: GPIO38 
+    
+    # Notice: interrupt_pin is COMPLETELY GONE. 
+    # This forces Polling Mode!
+    
+    on_touch:
+      - lambda: |-
+          ESP_LOGI("TOUCH_DEBUG", "RAW TAP: X: %d | Y: %d", touch.x, touch.y);
+
+
+
+# =========================================
+# GLOBAL COLORS
+# =========================================
 color:
   - id: pip_bright
     red: 0%
@@ -114,50 +206,71 @@ color:
     green: 20%
     blue: 0%
   - id: pip_alert
-    red: 0%
+    red: 100%
     green: 0%
-    blue: 100%
+    blue: 0%
 
 # =========================================
-# MEMORY & GLOBALS (Unchanged from your file)
+# GLOBAL FONTS
 # =========================================
-globals:
-  - id: show_boot_screen
-    type: bool
-    initial_value: 'true'
-  - id: boot_start_time
-    type: uint32_t
-    initial_value: '0'
-  - id: active_main_tab
-    type: int
-    initial_value: '0' 
-  - id: active_sub_tab
-    type: int
-    initial_value: '0' 
-  - id: hex_grid
-    type: int[16]
-    initial_value: ${active_grid}
-  - id: locked_cells
-    type: bool[16] 
-    initial_value: ${active_lock}
-  - id: target_sum
-    type: int
-    initial_value: '30' 
-  - id: data_solved
-    type: bool
-    initial_value: 'false'
-  - id: input_direction
-    type: int
-    initial_value: '1' 
-  - id: ui_enable_speaker
-    type: bool
-    initial_value: 'true'
-  - id: vault_xp
-    type: int
-    initial_value: '0'
-  - id: vault_hp
-    type: int
-    initial_value: '100'
+font:
+  - file: "monofonto.otf"
+    id: pip_main_font
+    size: 36
+    glyphs: 
+      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+  - file: "monofonto.otf"
+    id: pip_sub_font
+    size: 27
+    glyphs:
+      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+      - 'Σ'
+
+animation:
+  - file: "vaultboy_walking.gif"
+    id: anim_vault_boy
+    type: RGB565
+
+# =========================================
+# MEMORY & GLOBALS (old from your file)
+# =========================================
+# globals:
+#   - id: show_boot_screen
+#     type: bool
+#     initial_value: 'true'
+#   - id: boot_start_time
+#     type: uint32_t
+#     initial_value: '0'
+#   - id: active_main_tab
+#     type: int
+#     initial_value: '0' 
+#   - id: active_sub_tab
+#     type: int
+#     initial_value: '0' 
+#   - id: hex_grid
+#     type: int[16]
+#     initial_value: ${active_grid}
+#   - id: locked_cells
+#     type: bool[16] 
+#     initial_value: ${active_lock}
+#   - id: target_sum
+#     type: int
+#     initial_value: '30' 
+#   - id: data_solved
+#     type: bool
+#     initial_value: 'false'
+#   - id: input_direction
+#     type: int
+#     initial_value: '1' 
+#   - id: ui_enable_speaker
+#     type: bool
+#     initial_value: 'true'
+#   - id: vault_xp
+#     type: int
+#     initial_value: '0'
+#   - id: vault_hp
+#     type: int
+#     initial_value: '100'
 
 # =========================================
 # SENSORS (Abridged to essentials for compilation)
@@ -193,108 +306,263 @@ interval:
           }
 
 # =========================================
-# DISPLAY & TOUCH CONFIGURATION
+# DISPLAY CONFIGURATION
 # =========================================
-touchscreen:
-  - platform: gt911
-    display: my_display
-    interrupt_pin: GPIO18
-    reset_pin: GPIO38
-    id: my_touch
 
-display:
-  - platform: rpi_dpi_rgb
-    id: my_display
-    dimensions:
-      width: 800
-      height: 480
-    pclk_frequency: 15MHz
-    hsync_pulse_width: 1
-    hsync_back_porch: 42
-    hsync_front_porch: 20
-    vsync_pulse_width: 10
-    vsync_back_porch: 12
-    vsync_front_porch: 4
-    pclk_inverted: true
-    color_order: rgb
-    de_pin: GPIO40
-    hsync_pin: GPIO39
-    vsync_pin: GPIO41
-    pclk_pin: GPIO42
-    data_pins:
-      blue: [GPIO8, GPIO3, GPIO46, GPIO9, GPIO1]
-      green: [GPIO5, GPIO6, GPIO7, GPIO15, GPIO16, GPIO4]
-      red: [GPIO45, GPIO48, GPIO47, GPIO21, GPIO14]
-    
-    # Critical: No Auto-Clear, Fast Update
-    auto_clear_enabled: false
-    update_interval: 50ms 
-    
-    lambda: |-
-      // --- THE VIEWPORT WIPE ---
-      // We manually clear ONLY the 608x480 usable area on the left.
-      // The remaining 192 pixels on the right stay dark.
-      it.filled_rectangle(0, 0, 608, 480, Color(0, 0, 0));
-      
-      // --- BOOT SEQUENCE ---
-      if (id(show_boot_screen)) {
-          uint32_t elapsed = millis() - id(boot_start_time);
-          if (elapsed > 500) {
-              it.printf(19, 40, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM");
-              it.printf(19, 80, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "COPYRIGHT 2077 ROBCO(R)");
-          }
-          if (elapsed > 1500) {
-              it.printf(19, 160, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Pip-Boy 3000 Mark IV");
-              it.printf(19, 200, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Version %s", "${pip_version}");
-          }
-          if (elapsed > 3000 && elapsed < 9000) {
-              it.printf(19, 300, id(pip_sub_font), id(pip_bright), TextAlign::TOP_LEFT, "Mounting Holotape Drive...");
-          }
-          if (elapsed > 16000) {
-              id(show_boot_screen) = false; 
-          }
-          return; // Stop drawing UI while booting
-      }
+lvgl:
+  displays:
+    - my_display
+  touchscreens:
+    - my_touch
+  bg_color: 0x000000
 
-      // --- MAIN MENU BAR ---
-      int main_y = 50;  // Scaled down
-      const char* main_labels[] = {"STAT", "INV", "DATA", "MAP"}; 
-      int main_x_pos[] = {76, 190, 418, 532}; // Scaled across 608px
-      
-      for (int i = 0; i < 4; i++) {
-          Color draw_color = (id(active_main_tab) == i) ? id(pip_bright) : id(pip_unselected);
-          it.printf(main_x_pos[i], main_y, id(pip_main_font), draw_color, TextAlign::CENTER, main_labels[i]);
-      }
+  pages:
 
-      // --- RAD GAUGE (Scaled) ---
-      if (id(active_main_tab) == 0 && id(active_sub_tab) == 0) {
-          float rads = id(current_rads).state;
-          if (std::isnan(rads)) rads = 0.0;
-          
-          int cx = 604; // Flushed against the far right of the 608px viewport
-          int cy = 240; // Center Y
-          int radius = 114; 
-          
-          // Draw Gauge Backing
-          for(int r_offset = 0; r_offset < 5; r_offset++) {
-              it.circle(cx, cy, radius - r_offset, id(pip_line));
-          }
-          it.printf(600, 110, id(pip_sub_font), id(pip_bright), TextAlign::TOP_RIGHT, "RADS");
-          it.printf(600, 160, id(pip_main_font), id(pip_bright), TextAlign::TOP_RIGHT, "%.1f", rads);
-      }
+# ==========================================
+    # PAGE 1: THE MAIN PIP-BOY INTERFACE
+    # ==========================================
+    - id: main_interface
+      bg_color: 0x000000
+      widgets:
+        
+        # --- THE PERSISTENT FOOTER (Shifted +192px to the right) ---
+        - label:
+            text: "HP:"
+            x: 240
+            y: 445
+            text_color: pip_bright
+            text_font: pip_main_font
+        - label:
+            text: "100"
+            x: 290
+            y: 445
+            text_color: pip_bright
+            text_font: pip_main_font
+            
+        - label:
+            text: "v-2.0.4-S3"
+            # Replaced BOTTOM_MID alignment with an absolute X coordinate 
+            # to center it perfectly within the new 608px window
+            x: 425 
+            y: 450
+            text_color: pip_unselected
+            text_font: pip_sub_font
+            
+        - label:
+            text: "XP:"
+            x: 672
+            y: 445
+            text_color: pip_bright
+            text_font: pip_main_font
+        - label:
+            text: "0"
+            x: 722
+            y: 445
+            text_color: pip_bright
+            text_font: pip_main_font
 
-      // --- MEMORY CORE PUZZLE (Scaled) ---
-      if (id(active_main_tab) == 2) {
-          it.printf(304, 100, id(pip_main_font), id(pip_bright), TextAlign::CENTER, "MEMORY CORE REPAIR");
-          int start_x = 114, start_y = 160, cell_w = 95, cell_h = 50; 
-          
-          for (int r = 0; r < 4; r++) {
-              for (int c = 0; c < 4; c++) {
-                  int idx = r * 4 + c;
-                  int val = id(hex_grid)[idx];
-                  it.rectangle(start_x+(c*cell_w), start_y+(r*cell_h), cell_w-4, cell_h-4, id(pip_line));
-                  Color txt_col = id(locked_cells)[idx] ? id(pip_unselected) : id(pip_bright);
-                  it.printf(start_x+(c*cell_w)+47, start_y+(r*cell_h), id(pip_sub_font), txt_col, TextAlign::TOP_CENTER, "%02X", val);
-              }
-          }
-      }
+        # --- THE MAIN TABVIEW (Shifted +192px to the right) ---
+        - tabview:
+            id: main_tabs
+            x: 220
+            y: 0
+            width: 580
+            height: 440 
+            bg_color: 0x000000
+            tab_style:
+              bg_color: 0x000000
+              text_color: pip_unselected
+              text_font: pip_main_font
+              items:
+                checked:
+                  bg_color: pip_line 
+                  text_color: pip_bright
+            tabs:
+              # --- TAB 1: STAT ---
+              - name: "STAT"
+                widgets:
+                  - roller:
+                      x: 10
+                      y: 50
+                      width: 150
+                      options:
+                        - STATUS
+                        - S.P.E.C.I.A.L.
+                        - PERKS
+                      visible_row_count: 3
+                      text_color: pip_unselected
+                      bg_color: 0x000000
+                      selected:
+                        bg_color: pip_line
+                        text_color: pip_bright
+                  # ==========================================
+                  # ANIMATED VAULT BOY
+                  # ==========================================
+                  - image:
+                      src: anim_vault_boy
+                      x: 220
+                      y: 80
+                  # ==========================================
+                  # RAD GAUGE (Stacked Method)
+                  # ==========================================
+                  - arc:
+                      id: lv_arc_6
+                      x: 400  #was 450
+                      y: 40
+                      width: 250
+                      height: 250
+                      value: 25
+                      min_value: 0
+                      max_value: 50
+                      adjustable: false
+                      start_angle: 0
+                      end_angle: 180
+                      rotation: 90
+                      arc_color: pip_line
+                      arc_width: 25
+                      arc_opa: 100%
+                      arc_rounded: false
+                      indicator:
+                        arc_color: pip_bright
+                        arc_width: 25
+                      widgets:
+                        - label:
+                            x: 70
+                            y: 100
+                            text: "RADS"
+                            text_color: pip_bright
+                            text_font: pip_sub_font
+                        - label:
+                            id: lbl_rads
+                            x: 80
+                            y: 125
+                            text: "25"
+                            text_color: pip_bright
+                            text_font: pip_main_font
+              # --- TAB 2: INV ---
+              - name: "INV"
+                widgets:
+                  - bar:
+                      x: 550
+                      y: 20
+                      width: 20
+                      height: 200
+                      value: 50
+                      bg_color: pip_line
+                      indicator:
+                        bg_color: pip_bright
+
+              # --- TAB 3: DATA (Memory Core) ---
+              - name: "DATA"
+                widgets:
+                  - label:
+                      text: "MEMORY CORE REPAIR"
+                      x: 150
+                      y: 10
+                      text_color: pip_bright
+                      text_font: pip_main_font
+                  - label:
+                      text: "TARGET PARITY: 0x1E"
+                      x: 180
+                      y: 300
+                      text_color: pip_unselected
+                      text_font: pip_sub_font
+                      
+                  # 1. THE MAIN PUZZLE GRID
+                  - buttonmatrix:
+                      id: memory_core_grid
+                      x: 40 
+                      y: 60
+                      width: 380
+                      height: 220
+                      # --- FLATTENED CASCADING STYLES ---
+                      bg_color: 0x000000
+                      text_color: pip_bright
+                      text_font: pip_main_font
+                      border_width: 0
+                      rows:
+                        - buttons:
+                          - text: "00"
+                          - text: "0D"
+                          - text: "02"
+                          - text: "01"
+                        - buttons:
+                          - text: "0C"
+                          - text: "09"
+                          - text: "04"
+                          - text: "0A"
+                        - buttons:
+                          - text: "07"
+                          - text: "08"
+                          - text: "06"
+                          - text: "05"
+                        - buttons:
+                          - text: "0B"
+                          - text: "03"
+                          - text: "0E"
+                          - text: "00"
+                      # on_click:
+                      #   - lambda: |-
+                      #       // 'button_index' automatically outputs 0 through 15
+                      #       ESP_LOGI("ROBCO", "Dweller tapped cell index: %d", button_index);
+                            
+                  # 2. THE MODIFIER GRID (+ / -)
+                  - buttonmatrix:
+                      id: modifier_grid
+                      x: 440
+                      y: 60
+                      width: 80
+                      height: 220
+                      one_checked: true 
+                      # --- FLATTENED CASCADING STYLES ---
+                      bg_color: 0x000000
+                      text_color: pip_bright
+                      text_font: pip_main_font
+                      border_width: 0
+                      rows:
+                        - buttons:
+                          - text: "+"
+                        - buttons:
+                          - text: "-"
+                      # on_click:
+                      #   - lambda: |-
+                      #       if (button_index == 0) {
+                      #         id(input_direction) = 1;  // Plus selected
+                      #         ESP_LOGI("ROBCO", "Modifier set to ADD");
+                      #       } else {
+                      #         id(input_direction) = -1; // Minus selected
+                      #         ESP_LOGI("ROBCO", "Modifier set to SUBTRACT");
+                      #       }
+
+              # --- TAB 4: MAP ---
+              - name: "MAP"
+                widgets:
+                  - switch:
+                      x: 50
+                      y: 50
+                      width: 60
+                      height: 30
+                      bg_color: pip_line
+                      indicator:
+                        bg_color: pip_bright
+                      knob:
+                        bg_color: pip_bright
+
+    # ==========================================
+    # PAGE 2: THE MELTDOWN SEQUENCE (Hidden)
+    # ==========================================
+    - id: meltdown_screen
+      bg_color: 0x330000 # Dark Red Background
+      widgets:
+        - label:
+            text: "CRITICAL ALERT"
+            align: CENTER
+            y: -40
+            text_color: 0xFF0000 # Bright Red
+            text_font: pip_main_font
+        - label:
+            text: "REACTOR MELTDOWN IMMINENT"
+            align: CENTER
+            y: 20
+            text_color: 0xFF0000
+            text_font: pip_sub_font
