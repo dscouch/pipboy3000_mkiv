@@ -1,0 +1,184 @@
+lvgl:
+  pages:
+    - id: canvas_1
+      bg_color: 0x111827
+      widgets:
+        - tabview:
+            id: lv_tabview_12
+            x: 0
+            y: 0
+            width: 605
+            height: 430
+            bg_color: 0x000000
+            tab_style:
+              bg_color: 0x000000
+              text_color: 0x009900
+              items:
+                checked:
+                  bg_color: 0x002200
+                  text_color: 0x00FF00
+                pressed:
+                  text_color: 0x00FF00
+            tabs:
+              - name: STAT
+                widgets:
+                  - roller:
+                      id: lv_roller_5
+                      x: 18
+                      y: 66
+                      width: 80
+                      height: 100
+                      options:
+                        - Option 1
+                        - Option 2
+                        - Option 3
+                        - Option 4
+                        - Option 5
+                      text_color: 0x009900
+                      bg_color: 0x000000
+                      border_color: 0x000000
+                      selected:
+                        bg_color: 0x003300
+                        text_color: 0x00FF00
+                  - arc:
+                      id: lv_arc_7
+                      x: 446
+                      y: 98
+                      width: 170
+                      height: 210
+                      value: 50
+                      min_value: 0
+                      max_value: 50
+                      adjustable: false
+                      start_angle: 45
+                      end_angle: 315
+                      arc_color: 0x00FF00
+                      arc_width: 20
+                      arc_opa: 0%
+                      arc_rounded: false
+                  - label:
+                      id: lv_label_9
+                      x: 543
+                      y: 171
+                      width: 60
+                      height: 30
+                      text: "RADS"
+                      text_color: 0x00FF00
+                      text_align: CENTER
+                      text_opa: 100%
+                      text_font: monofonto.otf
+                  - label:
+                      id: lv_label_10
+                      x: 543
+                      y: 206
+                      width: 60
+                      height: 30
+                      text: "25"
+                      text_color: 0x00FF00
+                      text_align: CENTER
+                      text_font: montserrat_20
+                      text_line_space: 0
+              - name: INV
+                widgets:
+                  - textarea:
+                      id: lv_textarea_2
+                      x: 88
+                      y: 74
+                      width: 200
+                      height: 100
+                      placeholder_text: "Enter text here"
+                  - bar:
+                      id: lv_bar_8
+                      x: 530
+                      y: 59
+                      width: 20
+                      height: 150
+                      value: 50
+                      min_value: 0
+                      max_value: 100
+                      indicator:
+                        bg_color: 0x00FF00
+                      bg_color: 0x000000
+              - name: DATA
+                widgets:
+                  - buttonmatrix:
+                      id: lv_buttonmatrix_6
+                      x: 144
+                      y: 34
+                      width: 320
+                      height: 310
+                      rows:
+                        - buttons:
+                          - id: btn_1
+                            text: "Btn 1"
+                          - id: btn_2
+                            text: "Btn 2"
+                          - id: btn_3
+                            text: "Btn 3"
+                          - id: btn_1_4
+                            text: "Btn 1.4"
+                        - buttons:
+                          - id: btn_4
+                            text: "Btn 4"
+                          - id: btn_5
+                            text: "Btn 5"
+                          - id: btn_6
+                            text: "Btn 6"
+                          - id: btn_2_4
+                            text: "Btn 2.4"
+                        - buttons:
+                          - id: btn_3_1
+                            text: "Btn 3.1"
+                          - id: btn_3_2
+                            text: "Btn 3.2"
+                          - id: btn_3_3
+                            text: "Btn 3.3"
+                          - id: btn_3_4
+                            text: "Btn 3.4"
+                        - buttons:
+                          - id: btn_4_1
+                            text: "Btn 4.1"
+                          - id: btn_4_2
+                            text: "Btn 4.2"
+                          - id: btn_4_3
+                            text: "Btn 4.3"
+                          - id: btn_4_4
+                            text: "Btn 4.4"
+              - name: MAP
+                widgets:
+                  - switch:
+                      id: lv_switch_3
+                      x: 43
+                      y: 73
+                      width: 60
+                      height: 30
+                      bg_color: 0x4B5563
+                      indicator:
+                        bg_color: 0x4F46E5
+                      knob:
+                        bg_color: 0xFFFFFF
+                        border_color: 0x9CA3AF
+                        border_width: 1
+                  - spinbox:
+                      id: lv_spinbox_4
+                      x: 344
+                      y: 59
+                      width: 140
+                      height: 60
+                      range_from: 0
+                      range_to: 100
+                      digits: 4
+                      text_color: 0x000000
+                      bg_color: 0xFFFFFF
+                      border_width: 1
+                      border_color: 0xCCCCCC
+                  - obj:
+                      id: lv_obj_11
+                      x: 171
+                      y: 84
+                      width: 100
+                      height: 100
+                      bg_color: 0x4F46E5
+                      border_color: 0x4B5563
+                      border_width: 1
+                      radius: 8
