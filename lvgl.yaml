@@ -76,6 +76,7 @@ interval:
 
 # --- THE DISPLAY HARDWARE ---
 # Notice there is no lambda here anymore! LVGL takes control.
+# Size of visible display is 600x480 starting at x=200
 display:
   - platform: rpi_dpi_rgb
     id: my_display
@@ -103,9 +104,18 @@ display:
 touchscreen:
   - platform: gt911
     display: my_display
-    interrupt_pin: GPIO18
-    reset_pin: GPIO38
     id: my_touch
+    # Explicitly lock in the address we found in your log
+    address: 0x5D 
+    # Keep the reset pin so it boots cleanly
+    reset_pin: GPIO38 
+    
+    # Notice: interrupt_pin is COMPLETELY GONE. 
+    # This forces Polling Mode!
+    
+    on_touch:
+      - lambda: |-
+          ESP_LOGI("TOUCH_DEBUG", "RAW TAP: X: %d | Y: %d", touch.x, touch.y);
 
 # =========================================
 # GLOBAL COLORS
@@ -154,54 +164,57 @@ lvgl:
   bg_color: 0x000000
 
   pages:
-    # ==========================================
+
+# ==========================================
     # PAGE 1: THE MAIN PIP-BOY INTERFACE
     # ==========================================
     - id: main_interface
       bg_color: 0x000000
       widgets:
         
-        # --- THE PERSISTENT FOOTER (Always Visible) ---
+        # --- THE PERSISTENT FOOTER (Shifted +192px to the right) ---
         - label:
             text: "HP:"
-            x: 10
+            x: 240
             y: 445
             text_color: pip_bright
             text_font: pip_main_font
         - label:
             text: "100"
-            x: 60
+            x: 290
             y: 445
             text_color: pip_bright
             text_font: pip_main_font
             
         - label:
-            text: "v-2.0.0-S3"
-            align: BOTTOM_MID
-            y: -5
+            text: "v-2.0.4-S3"
+            # Replaced BOTTOM_MID alignment with an absolute X coordinate 
+            # to center it perfectly within the new 608px window
+            x: 425 
+            y: 450
             text_color: pip_unselected
             text_font: pip_sub_font
             
         - label:
             text: "XP:"
-            x: 480
+            x: 672
             y: 445
             text_color: pip_bright
             text_font: pip_main_font
         - label:
             text: "0"
-            x: 530
+            x: 722
             y: 445
             text_color: pip_bright
             text_font: pip_main_font
 
-        # --- THE MAIN TABVIEW ---
+        # --- THE MAIN TABVIEW (Shifted +192px to the right) ---
         - tabview:
             id: main_tabs
-            x: 0
+            x: 220
             y: 0
-            width: 608
-            height: 440 # Leaves 40px at the bottom for the footer!
+            width: 580
+            height: 440 
             bg_color: 0x000000
             tab_style:
               bg_color: 0x000000
@@ -209,16 +222,15 @@ lvgl:
               text_font: pip_main_font
               items:
                 checked:
-                  bg_color: pip_line # Dark green box around the active tab
+                  bg_color: pip_line 
                   text_color: pip_bright
             tabs:
-              
               # --- TAB 1: STAT ---
               - name: "STAT"
                 widgets:
                   - roller:
                       x: 10
-                      y: 20
+                      y: 50
                       width: 150
                       options:
                         - STATUS
@@ -235,44 +247,45 @@ lvgl:
                   # ==========================================
                   - image:
                       src: anim_vault_boy
-                      x: 250
-                      y: 100
+                      x: 220
+                      y: 80
                   # ==========================================
                   # RAD GAUGE (Stacked Method)
                   # ==========================================
                   - arc:
                       id: lv_arc_6
-                      x: 430
-                      y: 117
-                      width: 170
-                      height: 170
-                      value: 50
+                      x: 400  #was 450
+                      y: 40
+                      width: 250
+                      height: 250
+                      value: 25
                       min_value: 0
                       max_value: 50
                       adjustable: false
                       start_angle: 0
-                      end_angle: 270
-                      rotation: 45
-                      arc_color: 0x000000
-                      arc_width: 15
+                      end_angle: 180
+                      rotation: 90
+                      arc_color: pip_line
+                      arc_width: 25
                       arc_opa: 100%
                       arc_rounded: false
                       indicator:
                         arc_color: pip_bright
+                        arc_width: 25
                       widgets:
                         - label:
+                            x: 70
+                            y: 100
                             text: "RADS"
-                            align: CENTER
-                            y: -20
                             text_color: pip_bright
                             text_font: pip_sub_font
                         - label:
+                            id: lbl_rads
+                            x: 80
+                            y: 125
                             text: "25"
-                            align: CENTER
-                            y: 15
                             text_color: pip_bright
                             text_font: pip_main_font
-
               # --- TAB 2: INV ---
               - name: "INV"
                 widgets:
@@ -301,13 +314,19 @@ lvgl:
                       y: 300
                       text_color: pip_unselected
                       text_font: pip_sub_font
+                      
+                  # 1. THE MAIN PUZZLE GRID
                   - buttonmatrix:
                       id: memory_core_grid
-                      x: 100
+                      x: 40 
                       y: 60
-                      width: 400
+                      width: 380
                       height: 220
-                      # Formatted for your 4x4 Hex Puzzle!
+                      # --- FLATTENED CASCADING STYLES ---
+                      bg_color: 0x000000
+                      text_color: pip_bright
+                      text_font: pip_main_font
+                      border_width: 0
                       rows:
                         - buttons:
                           - text: "00"
@@ -329,6 +348,38 @@ lvgl:
                           - text: "03"
                           - text: "0E"
                           - text: "00"
+                      # on_click:
+                      #   - lambda: |-
+                      #       // 'button_index' automatically outputs 0 through 15
+                      #       ESP_LOGI("ROBCO", "Dweller tapped cell index: %d", button_index);
+                            
+                  # 2. THE MODIFIER GRID (+ / -)
+                  - buttonmatrix:
+                      id: modifier_grid
+                      x: 440
+                      y: 60
+                      width: 80
+                      height: 220
+                      one_checked: true 
+                      # --- FLATTENED CASCADING STYLES ---
+                      bg_color: 0x000000
+                      text_color: pip_bright
+                      text_font: pip_main_font
+                      border_width: 0
+                      rows:
+                        - buttons:
+                          - text: "+"
+                        - buttons:
+                          - text: "-"
+                      # on_click:
+                      #   - lambda: |-
+                      #       if (button_index == 0) {
+                      #         id(input_direction) = 1;  // Plus selected
+                      #         ESP_LOGI("ROBCO", "Modifier set to ADD");
+                      #       } else {
+                      #         id(input_direction) = -1; // Minus selected
+                      #         ESP_LOGI("ROBCO", "Modifier set to SUBTRACT");
+                      #       }
 
               # --- TAB 4: MAP ---
               - name: "MAP"
