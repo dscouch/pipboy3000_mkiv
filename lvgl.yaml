@@ -1,184 +1,245 @@
+esphome:
+  name: pipboy-lvgl-base
+  friendly_name: Pip-Boy LVGL Base
+  on_boot:
+    priority: 800
+    then:
+      - output.turn_on: backlight_pin
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  # This is the ONE and ONLY place this command is allowed to exist
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
+      CONFIG_ESP32S3_DATA_CACHE_64KB: y
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
+      CONFIG_SPIRAM_RODATA: y
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+# =========================================
+# SYSTEM CONFIGURATION
+# =========================================
+logger:
+  level: DEBUG
+  hardware_uart: USB_SERIAL_JTAG
+
+debug: 
+  update_interval: 5s
+
+api:
+  encryption:
+    key: !secret pipboy_api_key 
+  # services:
+  #   - service: trigger_meltdown
+  #     then:
+  #       - lambda: |-
+  #           id(active_main_tab) = 0; // Force to STAT tab
+  #           id(active_sub_tab) = 0;  // Force to STATUS sub-tab
+  #           id(vault_hp) -= 50;      // Cut health
+  #           ESP_LOGW("pipboy", "OVERSEER INITIATED REACTOR MELTDOWN!");
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: .home 
+
+# =========================================
+# --- HARDWARE BUSES ---
+# =========================================
+output:
+  - platform: gpio
+    pin: GPIO2
+    id: backlight_pin
+    inverted: true
+
+i2c:
+  - sda: GPIO19
+    scl: GPIO20
+    scan: true
+    id: bus_a
+
+interval:
+  # The Animation Clock
+  - interval: 100ms # Decrease to 50ms to make him walk faster!
+    then:
+      - animation.next_frame: anim_vault_boy
+
+# --- THE DISPLAY HARDWARE ---
+# Notice there is no lambda here anymore! LVGL takes control.
+display:
+  - platform: rpi_dpi_rgb
+    id: my_display
+    dimensions:
+      width: 800
+      height: 480
+    pclk_frequency: 15MHz
+    hsync_pulse_width: 1
+    hsync_back_porch: 42
+    hsync_front_porch: 20
+    vsync_pulse_width: 10
+    vsync_back_porch: 12
+    vsync_front_porch: 4
+    pclk_inverted: true
+    color_order: rgb
+    de_pin: GPIO40
+    hsync_pin: GPIO39
+    vsync_pin: GPIO41
+    pclk_pin: GPIO42
+    data_pins:
+      blue: [GPIO8, GPIO3, GPIO46, GPIO9, GPIO1]
+      green: [GPIO5, GPIO6, GPIO7, GPIO15, GPIO16, GPIO4]
+      red: [GPIO45, GPIO48, GPIO47, GPIO21, GPIO14]
+
+touchscreen:
+  - platform: gt911
+    display: my_display
+    interrupt_pin: GPIO18
+    reset_pin: GPIO38
+    id: my_touch
+
+# =========================================
+# GLOBAL COLORS
+# =========================================
+color:
+  - id: pip_bright
+    red: 0%
+    green: 100%
+    blue: 0%
+  - id: pip_unselected
+    red: 0%
+    green: 60%
+    blue: 0%
+  - id: pip_line 
+    red: 0%
+    green: 20%
+    blue: 0%
+
+# =========================================
+# GLOBAL FONTS
+# =========================================
+font:
+  - file: "monofonto.otf"
+    id: pip_main_font
+    size: 36
+    glyphs: 
+      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+  - file: "monofonto.otf"
+    id: pip_sub_font
+    size: 27
+    glyphs:
+      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+      - 'Σ'
+
+animation:
+  - file: "vaultboy_walking.gif"
+    id: anim_vault_boy
+    type: RGB565
+
 lvgl:
+  displays:
+    - my_display
+  touchscreens:
+    - my_touch
+  bg_color: 0x000000
+
   pages:
-    - id: canvas_1
-      bg_color: 0x111827
+    - id: main_interface
+      bg_color: 0x000000
       widgets:
-        - tabview:
-            id: lv_tabview_12
-            x: 0
-            y: 0
-            width: 605
-            height: 430
-            bg_color: 0x000000
-            tab_style:
-              bg_color: 0x000000
-              text_color: 0x009900
-              items:
-                checked:
-                  bg_color: 0x002200
-                  text_color: 0x00FF00
-                pressed:
-                  text_color: 0x00FF00
-            tabs:
-              - name: STAT
-                widgets:
-                  - roller:
-                      id: lv_roller_5
-                      x: 18
-                      y: 66
-                      width: 80
-                      height: 100
-                      options:
-                        - Option 1
-                        - Option 2
-                        - Option 3
-                        - Option 4
-                        - Option 5
-                      text_color: 0x009900
-                      bg_color: 0x000000
-                      border_color: 0x000000
-                      selected:
-                        bg_color: 0x003300
-                        text_color: 0x00FF00
-                  - arc:
-                      id: lv_arc_7
-                      x: 446
-                      y: 98
-                      width: 170
-                      height: 210
-                      value: 50
-                      min_value: 0
-                      max_value: 50
-                      adjustable: false
-                      start_angle: 45
-                      end_angle: 315
-                      arc_color: 0x00FF00
-                      arc_width: 20
-                      arc_opa: 0%
-                      arc_rounded: false
-                  - label:
-                      id: lv_label_9
-                      x: 543
-                      y: 171
-                      width: 60
-                      height: 30
-                      text: "RADS"
-                      text_color: 0x00FF00
-                      text_align: CENTER
-                      text_opa: 100%
-                      text_font: monofonto.otf
-                  - label:
-                      id: lv_label_10
-                      x: 543
-                      y: 206
-                      width: 60
-                      height: 30
-                      text: "25"
-                      text_color: 0x00FF00
-                      text_align: CENTER
-                      text_font: montserrat_20
-                      text_line_space: 0
-              - name: INV
-                widgets:
-                  - textarea:
-                      id: lv_textarea_2
-                      x: 88
-                      y: 74
-                      width: 200
-                      height: 100
-                      placeholder_text: "Enter text here"
-                  - bar:
-                      id: lv_bar_8
-                      x: 530
-                      y: 59
-                      width: 20
-                      height: 150
-                      value: 50
-                      min_value: 0
-                      max_value: 100
-                      indicator:
-                        bg_color: 0x00FF00
-                      bg_color: 0x000000
-              - name: DATA
-                widgets:
-                  - buttonmatrix:
-                      id: lv_buttonmatrix_6
-                      x: 144
-                      y: 34
-                      width: 320
-                      height: 310
-                      rows:
-                        - buttons:
-                          - id: btn_1
-                            text: "Btn 1"
-                          - id: btn_2
-                            text: "Btn 2"
-                          - id: btn_3
-                            text: "Btn 3"
-                          - id: btn_1_4
-                            text: "Btn 1.4"
-                        - buttons:
-                          - id: btn_4
-                            text: "Btn 4"
-                          - id: btn_5
-                            text: "Btn 5"
-                          - id: btn_6
-                            text: "Btn 6"
-                          - id: btn_2_4
-                            text: "Btn 2.4"
-                        - buttons:
-                          - id: btn_3_1
-                            text: "Btn 3.1"
-                          - id: btn_3_2
-                            text: "Btn 3.2"
-                          - id: btn_3_3
-                            text: "Btn 3.3"
-                          - id: btn_3_4
-                            text: "Btn 3.4"
-                        - buttons:
-                          - id: btn_4_1
-                            text: "Btn 4.1"
-                          - id: btn_4_2
-                            text: "Btn 4.2"
-                          - id: btn_4_3
-                            text: "Btn 4.3"
-                          - id: btn_4_4
-                            text: "Btn 4.4"
-              - name: MAP
-                widgets:
-                  - switch:
-                      id: lv_switch_3
-                      x: 43
-                      y: 73
-                      width: 60
-                      height: 30
-                      bg_color: 0x4B5563
-                      indicator:
-                        bg_color: 0x4F46E5
-                      knob:
-                        bg_color: 0xFFFFFF
-                        border_color: 0x9CA3AF
-                        border_width: 1
-                  - spinbox:
-                      id: lv_spinbox_4
-                      x: 344
-                      y: 59
-                      width: 140
-                      height: 60
-                      range_from: 0
-                      range_to: 100
-                      digits: 4
-                      text_color: 0x000000
-                      bg_color: 0xFFFFFF
-                      border_width: 1
-                      border_color: 0xCCCCCC
-                  - obj:
-                      id: lv_obj_11
-                      x: 171
-                      y: 84
-                      width: 100
-                      height: 100
-                      bg_color: 0x4F46E5
-                      border_color: 0x4B5563
-                      border_width: 1
-                      radius: 8
+        
+        # ==========================================
+        # TOP NAVIGATION MENU
+        # ==========================================
+        - label:
+            text: "STAT2"
+            x: 50
+            y: 20
+            text_font: pip_main_font
+            text_color: pip_bright
+        - label:
+            text: "INV"
+            x: 200
+            y: 20
+            text_font: pip_main_font
+            text_color: pip_unselected
+        - label:
+            text: "DATA"
+            x: 350
+            y: 20
+            text_font: pip_main_font
+            text_color: pip_unselected
+        - label:
+            text: "MAP"
+            x: 500
+            y: 20
+            text_font: pip_main_font
+            text_color: pip_unselected
+            
+        # The thick separator line below the menu
+        - obj:
+            x: 10
+            y: 70
+            width: 588
+            height: 4
+            bg_color: pip_bright
+            border_width: 0
+
+        # ==========================================
+        # ANIMATED VAULT BOY
+        # ==========================================
+        - image:
+            src: anim_vault_boy
+            x: 40
+            y: 120
+
+        # ==========================================
+        # RAD GAUGE (Stacked Method)
+        # ==========================================
+        # 1. The Background Track (Dark Green, fixed at 100%)
+        - arc:
+            x: 320
+            y: 140
+            width: 240
+            height: 240
+            min_value: 0
+            max_value: 100
+            value: 100 
+            arc_color: pip_line
+            arc_width: 20
+
+        # 2. The Foreground Gauge (Bright Green, live values)
+        - arc:
+            id: ui_rad_gauge
+            x: 320
+            y: 140
+            width: 240
+            height: 240
+            min_value: 0
+            max_value: 1000
+            value: 45 
+            arc_color: pip_bright
+            arc_width: 20
+            widgets:
+              - label:
+                  text: "RADS"
+                  align: CENTER
+                  y: -30
+                  text_font: pip_sub_font
+                  text_color: pip_bright
+              - label:
+                  id: ui_rad_text
+                  text: "45"
+                  align: CENTER
+                  y: 20
+                  text_font: pip_main_font
+                  text_color: pip_bright
