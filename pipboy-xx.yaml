@@ -115,6 +115,17 @@ globals:
     initial_value: '0'
     restore_value: no
 
+#   - id: show_boot_screen
+#     type: bool
+#     initial_value: 'true'
+  - id: boot_start_time
+    type: uint32_t
+    initial_value: '0'
+
+#   - id: ui_enable_speaker
+#     type: bool
+#     initial_value: 'true'
+
 # =========================================
 # HARDWARE & BUSES
 # =========================================
@@ -230,47 +241,6 @@ animation:
   - file: "vaultboy_walking.gif"
     id: anim_vault_boy
     type: RGB565
-
-# =========================================
-# MEMORY & GLOBALS (old from your file)
-# =========================================
-# globals:
-#   - id: show_boot_screen
-#     type: bool
-#     initial_value: 'true'
-#   - id: boot_start_time
-#     type: uint32_t
-#     initial_value: '0'
-#   - id: active_main_tab
-#     type: int
-#     initial_value: '0' 
-#   - id: active_sub_tab
-#     type: int
-#     initial_value: '0' 
-#   - id: hex_grid
-#     type: int[16]
-#     initial_value: ${active_grid}
-#   - id: locked_cells
-#     type: bool[16] 
-#     initial_value: ${active_lock}
-#   - id: target_sum
-#     type: int
-#     initial_value: '30' 
-#   - id: data_solved
-#     type: bool
-#     initial_value: 'false'
-#   - id: input_direction
-#     type: int
-#     initial_value: '1' 
-#   - id: ui_enable_speaker
-#     type: bool
-#     initial_value: 'true'
-#   - id: vault_xp
-#     type: int
-#     initial_value: '0'
-#   - id: vault_hp
-#     type: int
-#     initial_value: '100'
 
 # =========================================
 # SENSORS (Abridged to essentials for compilation)
