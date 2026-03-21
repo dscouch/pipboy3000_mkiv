@@ -4,7 +4,7 @@
 A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzle experience. The system relies on asymmetric gameplay (similar to *Keep Talking and Nobody Explodes*), forcing two Vault Dwellers (793 and 612) to cooperate, swap roles, and manage "Radiation Sickness" to decode a final meta-puzzle.
 
 ## Hardware Architecture
-* **Main Display:** 5" ESP32-S3 Capacitive Touch Display (currently prototyping on ESP32-2432S024 "Cheap Yellow Displays").
+* **Main Display:** 5" ESP32-S3 Capacitive Touch Display - VIEWE Model：UEDX80480050E-WB-A https://viewedisplay.com/product/esp32-5-inch-800x480-rgb-ips-tft-display-touch-screen-arduino-lvgl/
 * **Co-processor:** ESP32-C3 Super Mini connected via serial. Dedicated to efficient BLE MAC address scanning for radiation hotspots, and driving a haptic motor and piezo speaker for Geiger counter feedback.
 * **RFID/NFC:** PN532 module for localized object scanning.
 * **I/O Expansion:** PCF8575 or MCP23017 I/O expander for managing peripherals like rotary encoders and LEDs.
@@ -13,14 +13,25 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 ## Software & Infrastructure
 * **Framework:** ESPHome integrated with Home Assistant.
 * **Codebase Structure:** A highly modular design utilizing YAML anchors and substitutions within a single document. This allows seamless switching of parameters between Dweller 793 and 612 without relying on multiple `!include` files.
-* **State Management:** Home Assistant acts as the Overseer, handling cross-device state syncing via `input_number.dweller_${id}_xxx`, game tweaks, and manual triggers (like the Reactor Meltdown).
+* **State Management:** Home Assistant acts as the Overseer, handling cross-device state syncing via `input_number.dweller_${id}_xxx`, game tweaks, and manual triggers (like the Reactor Meltdown) and the mystery cell in the Memory Core Repair menu
 
 ## Gameplay Mechanics
 * **Radiation Management:** Players scan for specific BLE MAC addresses at 4 hotspots. Staying in a hotspot increases Rads. If Rads exceed 25, the HUD and docs glitch out, forcing players to swap roles (Scanner vs. Manual Reader).
 * **Anti-Cheese Systems:** Scans have strict 10-second timeouts. Furthermore, the scanner must actively take radiation damage (Rads > 25) to solve the puzzle, preventing players from simply disabling the radiation source.
 * **Progression:** Solving the 4 hotspot puzzles yields encrypted data fragments stored in the INV Tab. The S.P.E.C.I.A.L. stats (STAT Tab) act as the decryption cipher, providing the variables needed for the final logic grid puzzle (DATA Tab).
 
+## Menus
+* **STAT** Shows RADs and basic information (can expand this) - STATUS, SPECIAL, and PERKS - SPECIAL contains stats that will change when enough HP is gained and will show the pad to unlock the final encyrpted message.
+* **INV** Will be the collection point for the puzzle data and the scanner for the 4 radiation clues (KTANE style)
+* **DATA** magic grid where the cells have to add to 30 in every row and colunn and cells values can't be duplicated. Some of the cells are locked and one special cell in the upper left side is actually controlled by the other pip boy.  There is a mystery cell outside the grid that is what controls the upper left cell on the other pip boy.
+* **MAP** contains a map (just a static image) of the house with pulsating dots (4) indicating where the radiation source puzzles are located.  In a submenu it also contains the docs for solving the puzzles.  The docs can't be opened (or glitch) when rads>25 to prevent both dwellers from being at the source at the same time.
+
 ## Current Development Roadmap
-* **Boot Screen:** Implementing a realistic Mark IV console-style scrolling text sequence featuring RobCo copyright, the `${pip_version}`, and biometrics initialization.
+* **Boot Screen:** Implementing a realistic Mark IV console-style scrolling text sequence featuring RobCo copyright, the `${pip_version}`, and biometrics initialization. (done)
 * **Game Logic:** Developing the core logic for the INV, MAP, and RADIO tabs.
-* **Optimization:** Keeping heavy animations stripped back for now to manage CYD RAM limits until the ESP32-S3 boards are integrated.
+* **Vaultboy Animation** figure out how to animate him
+* **RAD meter** reconnect to co-processor for display
+* **DATA MENU** finish configuring the puzzle and connect the mystery cell through HomeAssistant
+* **MAP MENU** Load screen with mini map of house. figure out how to overlay the beacon locations (figure out locations) - Create menu and doc system where the docs are stored in HA and loaded on the fly as needed (or we can just store it in code if we have enough space)
+* **INV MENU** Still thinking about this one. I kind of want to have 4 items displayed and when you NFC scan a beacon it opens one of the puzzles. Maybe the puzzles are on a completely different page and we just use the INV to record which ones they got and provide the encrypted messages?  Anyway, the puzzles need to be of a specific KTANE type but have about 3 to 4 defined puzzles (images or text) that can be rotated through.  there's an active countdown timer and the beacon has to be rescanned every 10 seconds to reset the countdown and continue or the puzzle blanks out and if you rescan after the countdown runs out you get the next puzzle.
+* **DEATH**  In the potential event that one of them "DIES" it will flip to a screen that says something like "Vault Dweller sustained too much damage to continue.  INITIATING CLONING SEQUENCE (with a timeout timer of 99 seconds) at which point the pip-boy reboots.  Attempting to reboot the pip-boy before cloning is complete will just drop them in the same page with a fresh 99 second timer - completion managed by HomeAssistant.  All stats and accomplishments should be saved in HomeAssistant and won't be lost due to death or pip-boy reboots or failures.  (overseer has game reset control for testing and situational restarts)
