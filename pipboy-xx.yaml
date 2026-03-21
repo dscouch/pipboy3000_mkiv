@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.0.6-LVGL"
+  pip_version: "v2.1.0-LVGL"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -122,7 +122,12 @@ globals:
   - id: boot_start_time
     type: uint32_t
     initial_value: '0'
-
+  - id: boot_step
+    type: int
+    initial_value: '0'
+  - id: boot_buffer
+    type: std::string
+    initial_value: '""'
 #   - id: ui_enable_speaker
 #     type: bool
 #     initial_value: 'true'
@@ -240,38 +245,55 @@ animation:
 # =========================================
 # SYSTEM SCRIPTS
 # =========================================
+
+#"Checking geiger counter calibration...");
+# "Verifying S.P.E.C.I.A.L. parameters...");
+#"Initializing Biometrics...");
+#"Subject: Dweller %s", "${dweller_id}");
+#"Biometrics Initialized.");
+
 script:
   - id: robco_boot_sequence
     then:
-      # 1. Ensure the boot screen is visible
+      # 1. Show the blank boot screen
       - lvgl.page.show: boot_screen
-      - delay: 1s
+      - delay: 500ms
       
-      # 2. Type Line 1
-      - lvgl.label.update:
-          id: ui_boot_text
-          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM"
-      - delay: 2s
-      
-      # 3. Add Line 2
-      - lvgl.label.update:
-          id: ui_boot_text
-          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES"
-      - delay: 2s
-
-      # 4. Add Line 3
-      - lvgl.label.update:
-          id: ui_boot_text
-          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES\n-Server 1-"
-      - delay: 2s
-      
-      # 5. Add Line 4
-      - lvgl.label.update:
-          id: ui_boot_text
-          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES\n-Server 1-\n\nBooting Pip-OS(R) ${pip_version}" 
-      
-      # 6. Hold for dramatic effect, then launch the UI!
-      - delay: 2ms
+      # 2. Loop through the array of text
+      - while:
+          condition:
+            lambda: |-
+              // UPDATE THIS NUMBER if you add more lines to the array below!
+              return id(boot_step) < 7; 
+          then:
+            # Grab the next line and add it to our text buffer
+            - lambda: |-
+                std::vector<std::string> lines = {
+                  "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\n",
+                  "COPYRIGHT 2075-2077 ROBCO INDUSTRIES\n",
+                  "Pip-Boy 3000 Mark IV\n",
+                  "\n",
+                  "Testing RAM... 640K OK\n",
+                  "Loading holotape drivers... OK\n",
+                  "Booting Pip-OS(R) ${pip_version}\n"
+                  "Initializing Biometrics...\n"
+                  " ...  Please stop struggling ...\n"
+                  "Subject: Dweller %s", "${dweller_id}\n"
+                  "Biometrics Initialized.\n"
+                };
+                id(boot_buffer) += lines[id(boot_step)];
+                id(boot_step)++; // Move to the next line for the next loop
+                
+            # Push the updated buffer to the LVGL label
+            - lvgl.label.update:
+                id: ui_boot_text
+                text: !lambda "return id(boot_buffer).c_str();"
+                
+            # The speed at which new lines appear
+            - delay: 2s 
+            
+      # 3. Hold for dramatic effect when finished, then launch the UI!
+      - delay: 5s
       - lvgl.page.show: main_interface
 
 # =========================================
@@ -335,7 +357,7 @@ lvgl:
             y: 20
             width: 560 # Keeps it from wrapping off-screen
             text_color: pip_bright
-            text_font: pip_main_font
+            text_font: pip_sub_font
 
     # ==========================================
     # PAGE 1: THE MAIN PIP-BOY INTERFACE
