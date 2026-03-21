@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.2.0-LVGL"
+  pip_version: "v2.2.1-LVGL"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -77,6 +77,29 @@ ota:
 
 debug: 
   update_interval: 5s
+
+# =========================================
+# OVERSEER CONTROLS (Home Assistant)
+# =========================================
+number:
+  - platform: template
+    name: "Scanner Sensitivity Offset"
+    id: ha_scanner_fudge
+    icon: "mdi:radioactive"
+    min_value: -100
+    max_value: 100
+    step: 5
+    initial_value: 0
+    optimistic: true
+    on_value:
+      - lambda: |-
+          // When the Overseer adjusts the slider in Home Assistant, 
+          // instantly format and transmit the command to the C3 Coprocessor!
+          char buffer[20];
+          sprintf(buffer, "FUDGE:%d\n", (int)x);
+          id(coproc_uart).write_str(buffer);
+          ESP_LOGI("OVERSEER", "Remote calibration override broadcasted: %d", (int)x);
+  
 # =========================================
 # RPG & PUZZLE STATE (GLOBALS)
 # =========================================
@@ -128,9 +151,16 @@ globals:
   - id: boot_buffer
     type: std::string
     initial_value: '""'
-#   - id: ui_enable_speaker
-#     type: bool
-#     initial_value: 'true'
+# Geiger Counter Settings
+  - id: rad_sound_enabled
+    type: bool
+    initial_value: 'false' # Starts FALSE on boot!
+  - id: rad_haptic_enabled
+    type: bool
+    initial_value: 'false' # Starts FALSE on boot!
+  - id: scanner_fudge
+    type: int
+    initial_value: '0'
 
 # =========================================
 # HARDWARE & BUSES
@@ -267,13 +297,13 @@ script:
                   "64K RAM SYSTEM\n",
                   "38911 BYTES FREE\n",
                   "NO HOLOTAPE FOUND\n",
-                  "LOAD ROM(1): DEITRIX 303\n", 
                   "Pip-Boy 3000 Mark IV\n",
                   "\n",
                   "Initializing Biometrics...\n",
                   " --- Please stop struggling ---\n",
                   "Subject: Dweller: ${dweller_id}\n",
-                  "Biometrics Initialized.\n"
+                  "Biometrics Initialized.",
+                  "Calibrating geiger counter... OK\n"
                 };
                 id(boot_buffer) += lines[id(boot_step)];
                 id(boot_step)++; 
@@ -323,6 +353,20 @@ script:
           }
           init_map[p] = ""; 
           lv_btnmatrix_set_map(id(memory_core_grid).obj, init_map);
+
+          // 1. Style the new STAT side menu (No borders, green highlight!)
+          lv_obj_set_style_bg_color(id(stat_side_menu).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
+          lv_obj_set_style_text_color(id(stat_side_menu).obj, lv_color_hex(0x009900), LV_PART_ITEMS); 
+          lv_obj_set_style_border_width(id(stat_side_menu).obj, 0, LV_PART_ITEMS);
+          // Highlight checked state
+          lv_obj_set_style_bg_color(id(stat_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
+          lv_obj_set_style_text_color(id(stat_side_menu).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS | LV_STATE_CHECKED);
+
+          // 2. Enable the Geiger Counter settings & flip the UI switches!
+          id(rad_sound_enabled) = true;
+          id(rad_haptic_enabled) = true;
+          lv_obj_add_state(id(switch_rad_sound).obj, LV_STATE_CHECKED);
+          lv_obj_add_state(id(switch_rad_haptic).obj, LV_STATE_CHECKED);
 
       # 5. Launch the UI!
       - lvgl.page.show: main_interface
@@ -473,65 +517,189 @@ lvgl:
             tabs:
               # --- TAB 1: STAT ---
               - name: "STAT"
+                scrollbar_mode: "OFF"
                 widgets:
-                  - roller:
+                  # --- THE SIDE NAVIGATION MENU ---
+                  - buttonmatrix:
+                      id: stat_side_menu
                       x: 10
-                      y: 50
-                      width: 150
-                      options:
-                        - STATUS
-                        - S.P.E.C.I.A.L.
-                        - PERKS
-                      visible_row_count: 3
-                      text_color: pip_unselected
+                      y: 20
+                      width: 140
+                      height: 150
+                      one_checked: true
                       bg_color: 0x000000
-                      selected:
-                        bg_color: pip_line
-                        text_color: pip_bright
-                  # ==========================================
-                  # ANIMATED VAULT BOY
-                  # ==========================================
-                  - image:
-                      src: anim_vault_boy
-                      x: 220
-                      y: 80
-                  # ==========================================
-                  # RAD GAUGE (Stacked Method)
-                  # ==========================================
-                  - arc:
-                      id: rad_arc
-                      x: 400  #was 450
-                      y: 40
-                      width: 250
-                      height: 250
-                      value: 25
-                      min_value: 0
-                      max_value: 50
-                      adjustable: false
-                      start_angle: 0
-                      end_angle: 180
-                      rotation: 90
-                      arc_color: pip_line
-                      arc_width: 25
-                      arc_opa: 100%
-                      arc_rounded: false
-                      indicator:
-                        arc_color: pip_bright
-                        arc_width: 25
+                      border_width: 0
+                      rows:
+                        - buttons:
+                          - text: "STATUS"
+                            checked: true
+                        - buttons:
+                          - text: "S.P.E.C.I.A.L."
+                        - buttons:
+                          - text: "PERKS"
+                      on_click:
+                        - lambda: |-
+                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(stat_side_menu).obj);
+                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
+                            
+                            // 1. Hide ALL sub-pages
+                            lv_obj_add_flag(id(stat_status_page).obj, LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(stat_special_page).obj, LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(stat_perks_page).obj, LV_OBJ_FLAG_HIDDEN);
+                            
+                            // 2. Reveal the chosen page
+                            if (btn_id == 0) lv_obj_clear_flag(id(stat_status_page).obj, LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 1) lv_obj_clear_flag(id(stat_special_page).obj, LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 2) lv_obj_clear_flag(id(stat_perks_page).obj, LV_OBJ_FLAG_HIDDEN);
+
+                  # --- PAGE 1: STATUS (Visible by default) ---
+                  - obj:
+                      id: stat_status_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 300
+                      bg_color: 0x000000
+                      border_width: 0
+                      scrollbar_mode: "OFF"
+                      widgets:
+                        # ==========================================
+                        # ANIMATED VAULT BOY
+                        # ==========================================
+                        - image:
+                            src: anim_vault_boy
+                            x: 220
+                            y: 80
+                        # ==========================================
+                        # RAD GAUGE (Stacked Method)
+                        # ==========================================
+                        - arc:
+                            id: rad_arc
+                            x: 400  #was 450
+                            y: 40
+                            width: 250
+                            height: 250
+                            value: 25
+                            min_value: 0
+                            max_value: 50
+                            adjustable: false
+                            start_angle: 0
+                            end_angle: 180
+                            rotation: 90
+                            arc_color: pip_line
+                            arc_width: 25
+                            arc_opa: 100%
+                            arc_rounded: false
+                            indicator:
+                              arc_color: pip_bright
+                              arc_width: 25
+                            widgets:
+                              - label:
+                                  x: 70
+                                  y: 100
+                                  text: "RADS"
+                                  text_color: pip_bright
+                                  text_font: pip_sub_font
+                              - label:
+                                  id: rad_label
+                                  x: 80
+                                  y: 125
+                                  text: "0"
+                                  text_color: pip_bright
+                                  text_font: pip_main_font
+
+                  # --- PAGE 2: S.P.E.C.I.A.L. (Hidden by default) ---
+                  - obj:
+                      id: stat_special_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 300
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true 
+                      scrollbar_mode: "OFF"
                       widgets:
                         - label:
-                            x: 70
-                            y: 100
-                            text: "RADS"
-                            text_color: pip_bright
-                            text_font: pip_sub_font
-                        - label:
-                            id: rad_label
-                            x: 80
-                            y: 125
-                            text: "0"
+                            text: "STR: 5\nPER: 6\nEND: 4\nCHA: 8\nINT: 7\nAGI: 4\nLUK: 9"
+                            x: 20
+                            y: 20
                             text_color: pip_bright
                             text_font: pip_main_font
+
+                  # --- PAGE 3: PERKS (Hidden by default) ---
+                  - obj:
+                      id: stat_perks_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 300
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true 
+                      scrollbar_mode: "OFF"
+                      widgets:
+                        - label:
+                            text: "GEIGER COUNTER SETTINGS"
+                            x: 20
+                            y: 20
+                            text_color: pip_bright
+                            text_font: pip_sub_font
+                            
+                        # Audio Toggle
+                        - label:
+                            text: "AUDIO CLICKS:"
+                            x: 20
+                            y: 80
+                            text_color: pip_unselected
+                            text_font: pip_main_font
+                        - switch:
+                            id: switch_rad_sound
+                            x: 250
+                            y: 75
+                            width: 60
+                            height: 30
+                            bg_color: pip_line
+                            indicator:
+                              bg_color: pip_bright
+                            knob:
+                              bg_color: 0x000000
+                            on_turn_on:
+                              - globals.set:
+                                  id: rad_sound_enabled
+                                  value: 'true'
+                            on_turn_off:
+                              - globals.set:
+                                  id: rad_sound_enabled
+                                  value: 'false'
+                                  
+                        # Haptic Toggle
+                        - label:
+                            text: "HAPTIC FEEDBACK:"
+                            x: 20
+                            y: 140
+                            text_color: pip_unselected
+                            text_font: pip_main_font
+                        - switch:
+                            id: switch_rad_haptic
+                            x: 250
+                            y: 135
+                            width: 60
+                            height: 30
+                            bg_color: pip_line
+                            indicator:
+                              bg_color: pip_bright
+                            knob:
+                              bg_color: 0x000000
+                            on_turn_on:
+                              - globals.set:
+                                  id: rad_haptic_enabled
+                                  value: 'true'
+                            on_turn_off:
+                              - globals.set:
+                                  id: rad_haptic_enabled
+                                  value: 'false'
+
               # --- TAB 2: INV ---
               - name: "INV"
                 widgets:
