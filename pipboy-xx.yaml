@@ -245,33 +245,33 @@ script:
     then:
       # 1. Ensure the boot screen is visible
       - lvgl.page.show: boot_screen
-      - delay: 500ms
+      - delay: 1s
       
       # 2. Type Line 1
       - lvgl.label.update:
           id: ui_boot_text
           text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM"
-      - delay: 800ms
+      - delay: 2s
       
       # 3. Add Line 2
       - lvgl.label.update:
           id: ui_boot_text
           text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES"
-      - delay: 800ms
+      - delay: 2s
 
       # 4. Add Line 3
       - lvgl.label.update:
           id: ui_boot_text
           text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES\n-Server 1-"
-      - delay: 1000ms
+      - delay: 2s
       
       # 5. Add Line 4
       - lvgl.label.update:
           id: ui_boot_text
-          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES\n-Server 1-\n\nBooting Pip-OS(R) v2.0.0..."
+          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES\n-Server 1-\n\nBooting Pip-OS(R) ${pip_version}" 
       
       # 6. Hold for dramatic effect, then launch the UI!
-      - delay: 1500ms
+      - delay: 2ms
       - lvgl.page.show: main_interface
 
 # =========================================
