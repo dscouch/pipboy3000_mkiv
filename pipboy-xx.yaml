@@ -532,11 +532,20 @@ lvgl:
                       rows:
                         - buttons:
                           - text: "STATUS"
-                            checked: true
+                            control:
+                              checkable: true
+                              checked: true
                         - buttons:
                           - text: "S.P.E.C.I.A.L."
+                            control:
+                              checkable: true
+                              checked: false
                         - buttons:
                           - text: "PERKS"
+                          - text: "S.P.E.C.I.A.L."
+                            control:
+                              checkable: true
+                              checked: false
                       on_click:
                         - lambda: |-
                             uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(stat_side_menu).obj);
