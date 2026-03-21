@@ -275,11 +275,11 @@ script:
                   "\n",
                   "Testing RAM... 640K OK\n",
                   "Loading holotape drivers... OK\n",
-                  "Booting Pip-OS(R) ${pip_version}\n"
-                  "\n"
-                  "Initializing Biometrics...\n"
-                  " ...  Please stop struggling ...\n"
-                  "Subject: Dweller: ${dweller_id}\n"
+                  "Booting Pip-OS(R) ${pip_version}\n",
+                  "\n",
+                  "Initializing Biometrics...\n",
+                  " ...  Please stop struggling ...\n",
+                  "Subject: Dweller: ${dweller_id}\n",
                   "Biometrics Initialized.\n"
                 };
                 id(boot_buffer) += lines[id(boot_step)];
