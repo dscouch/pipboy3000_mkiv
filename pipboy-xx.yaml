@@ -141,12 +141,6 @@ i2c:
     scan: true
     id: bus_a
 
-interval:
-  # The Animation Clock
-  - interval: 100ms # Decrease to 50ms to make him walk faster!
-    then:
-      - animation.next_frame: anim_vault_boy
-
 # The Coprocessor UART Bus ====================================================
 # (Pins mapped to available headers since the S3 Edge pins changed)
 uart:
@@ -274,7 +268,10 @@ interval:
               line += (char)c;
             }
           }
-
+  # The Animation Clock
+  - interval: 100ms # Decrease to 50ms to make him walk faster!
+    then:
+      - animation.next_frame: anim_vault_boy
 # =========================================
 # DISPLAY CONFIGURATION
 # =========================================
