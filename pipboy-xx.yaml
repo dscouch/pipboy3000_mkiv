@@ -31,6 +31,7 @@ esphome:
     priority: 800
     then:
       - output.turn_on: backlight_pin
+      - script.execute: robco_boot_sequence
       - lambda: |-
           id(boot_start_time) = millis(); 
           ESP_LOGI("ROBCO", "=============================================");
@@ -237,6 +238,43 @@ animation:
     type: RGB565
 
 # =========================================
+# SYSTEM SCRIPTS
+# =========================================
+script:
+  - id: robco_boot_sequence
+    then:
+      # 1. Ensure the boot screen is visible
+      - lvgl.page.show: boot_screen
+      - delay: 500ms
+      
+      # 2. Type Line 1
+      - lvgl.label.update:
+          id: ui_boot_text
+          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM"
+      - delay: 800ms
+      
+      # 3. Add Line 2
+      - lvgl.label.update:
+          id: ui_boot_text
+          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES"
+      - delay: 800ms
+
+      # 4. Add Line 3
+      - lvgl.label.update:
+          id: ui_boot_text
+          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES\n-Server 1-"
+      - delay: 1000ms
+      
+      # 5. Add Line 4
+      - lvgl.label.update:
+          id: ui_boot_text
+          text: "ROBCO INDUSTRIES UNIFIED OPERATING SYSTEM\nCOPYRIGHT 2075-2077 ROBCO INDUSTRIES\n-Server 1-\n\nBooting Pip-OS(R) v2.0.0..."
+      
+      # 6. Hold for dramatic effect, then launch the UI!
+      - delay: 1500ms
+      - lvgl.page.show: main_interface
+
+# =========================================
 # SENSORS (Abridged to essentials for compilation)
 # =========================================
 sensor:
@@ -284,8 +322,22 @@ lvgl:
   bg_color: 0x000000
 
   pages:
+    # ==========================================
+    # PAGE 0: THE ROBCO BOOT SEQUENCE
+    # ==========================================
+    - id: boot_screen
+      bg_color: 0x000000
+      widgets:
+        - label:
+            id: ui_boot_text
+            text: ""   # Starts completely blank
+            x: 20      # Gives it a nice command-line margin
+            y: 20
+            width: 560 # Keeps it from wrapping off-screen
+            text_color: pip_bright
+            text_font: pip_main_font
 
-# ==========================================
+    # ==========================================
     # PAGE 1: THE MAIN PIP-BOY INTERFACE
     # ==========================================
     - id: main_interface
@@ -307,7 +359,7 @@ lvgl:
             text_font: pip_main_font
             
         - label:
-            text: "v-2.0.4-S3"
+            text: ${pip_version}
             # Replaced BOTTOM_MID alignment with an absolute X coordinate 
             # to center it perfectly within the new 608px window
             x: 425 
