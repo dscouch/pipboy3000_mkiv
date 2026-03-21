@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.0.5-LVGL"
+  pip_version: "v2.0.6-LVGL"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -331,7 +331,7 @@ lvgl:
         - label:
             id: ui_boot_text
             text: ""   # Starts completely blank
-            x: 20      # Gives it a nice command-line margin
+            x: 220      # Gives it a nice command-line margin
             y: 20
             width: 560 # Keeps it from wrapping off-screen
             text_color: pip_bright
@@ -576,12 +576,14 @@ lvgl:
         - label:
             text: "CRITICAL ALERT"
             align: CENTER
+            x: 510
             y: -40
             text_color: 0xFF0000 # Bright Red
             text_font: pip_main_font
         - label:
             text: "REACTOR MELTDOWN IMMINENT"
             align: CENTER
+            x: 510
             y: 20
             text_color: 0xFF0000
             text_font: pip_sub_font
