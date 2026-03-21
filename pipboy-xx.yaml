@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.1.0-LVGL"
+  pip_version: "v2.1.2-LVGL"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -264,7 +264,7 @@ script:
           condition:
             lambda: |-
               // UPDATE THIS NUMBER if you add more lines to the array below!
-              return id(boot_step) < 7; 
+              return id(boot_step) < 12; 
           then:
             # Grab the next line and add it to our text buffer
             - lambda: |-
@@ -276,9 +276,10 @@ script:
                   "Testing RAM... 640K OK\n",
                   "Loading holotape drivers... OK\n",
                   "Booting Pip-OS(R) ${pip_version}\n"
+                  "\n"
                   "Initializing Biometrics...\n"
                   " ...  Please stop struggling ...\n"
-                  "Subject: Dweller %s", "${dweller_id}\n"
+                  "Subject: Dweller: ${dweller_id}\n"
                   "Biometrics Initialized.\n"
                 };
                 id(boot_buffer) += lines[id(boot_step)];
@@ -542,10 +543,60 @@ lvgl:
                           - text: "03"
                           - text: "0E"
                           - text: "00"
-                      # on_click:
-                      #   - lambda: |-
-                      #       // 'button_index' automatically outputs 0 through 15
-                      #       ESP_LOGI("ROBCO", "Dweller tapped cell index: %d", button_index);
+                      # --- THE INTERACTIVE C++ PUZZLE ENGINE ---
+                      on_click:
+                        - lambda: |-
+                            // Ask LVGL which button in this matrix has the current focus
+                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(memory_core_grid).obj);
+                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return; // Safety check
+                            
+                            // 1. Check if the cell is hardware-locked
+                            if (id(locked_cells)[btn_id]) {
+                              ESP_LOGW("ROBCO", "ACCESS DENIED: Cell %d is locked by the Memory Core.", btn_id);
+                              return; // Stop the script right here
+                            }
+
+                            // 2. Modify the Hex Value
+                            int val = id(hex_grid)[btn_id];
+                            val += id(input_direction); // Adds 1 or -1
+                            
+                            // Wrap around standard hex values (0x0 to 0xF)
+                            if (val > 15) val = 0;
+                            if (val < 0) val = 15;
+                            
+                            // Save the new value back to the global array
+                            id(hex_grid)[btn_id] = val;
+                            
+                            // 3. Rebuild the LVGL Button Map
+                            static char btn_labels[16][4];
+                            static const char *new_map[21]; 
+                            
+                            int map_pos = 0;
+                            for (int i = 0; i < 16; i++) {
+                              sprintf(btn_labels[i], "%02X", id(hex_grid)[i]);
+                              new_map[map_pos++] = btn_labels[i];
+                              
+                              if ((i + 1) % 4 == 0 && i != 15) {
+                                new_map[map_pos++] = "\n";
+                              }
+                            }
+                            new_map[map_pos] = ""; 
+                            
+                            // Push the newly generated map directly into the LVGL graphics object
+                            lv_btnmatrix_set_map(id(memory_core_grid).obj, new_map);
+
+                            // 4. Check if the parity puzzle is solved!
+                            int current_sum = 0;
+                            for (int i = 0; i < 16; i++) {
+                              current_sum += id(hex_grid)[i];
+                            }
+                            
+                            if (current_sum == id(target_sum) && !id(data_solved)) {
+                              id(data_solved) = true;
+                              ESP_LOGI("ROBCO", "PARITY REACHED (0x1E)! MEMORY CORE REPAIRED!");
+                            } else {
+                              ESP_LOGD("ROBCO", "Current Core Parity: %d", current_sum);
+                            }
                             
                   # 2. THE MODIFIER GRID (+ / -)
                   - buttonmatrix:
@@ -565,15 +616,20 @@ lvgl:
                           - text: "+"
                         - buttons:
                           - text: "-"
-                      # on_click:
-                      #   - lambda: |-
-                      #       if (button_index == 0) {
-                      #         id(input_direction) = 1;  // Plus selected
-                      #         ESP_LOGI("ROBCO", "Modifier set to ADD");
-                      #       } else {
-                      #         id(input_direction) = -1; // Minus selected
-                      #         ESP_LOGI("ROBCO", "Modifier set to SUBTRACT");
-                      #       }
+                      # --- THE MODIFIER TRIGGER ---
+                      on_click:
+                        - lambda: |-
+                            // Ask LVGL which modifier button was pressed
+                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(modifier_grid).obj);
+                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
+                            
+                            if (btn_id == 0) {
+                              id(input_direction) = 1;  
+                              ESP_LOGI("ROBCO", "Modifier set to ADD");
+                            } else {
+                              id(input_direction) = -1; 
+                              ESP_LOGI("ROBCO", "Modifier set to SUBTRACT");
+                            }
 
               # --- TAB 4: MAP ---
               - name: "MAP"
