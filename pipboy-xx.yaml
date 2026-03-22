@@ -139,9 +139,9 @@ globals:
     initial_value: '0'
     restore_value: no
 
-#   - id: show_boot_screen
-#     type: bool
-#     initial_value: 'true'
+  - id: show_boot_screen
+    type: bool
+    initial_value: 'false'
   - id: boot_start_time
     type: uint32_t
     initial_value: '0'
@@ -314,10 +314,10 @@ script:
                 text: !lambda "return id(boot_buffer).c_str();"
                 
             # The speed at which new lines appear
-            - delay: 2s 
+            - delay: 20ms #2s to be annoying
             
       # 3. Hold for dramatic effect when finished
-      - delay: 5s
+      - delay: 2s  #5s to be annoying
       
       # 4. INITIALIZE GRIDS & COLORS BEFORE SHOWING THE UI!
       - lambda: |-
@@ -365,8 +365,8 @@ script:
           // 2. Enable the Geiger Counter settings & flip the UI switches!
           id(rad_sound_enabled) = true;
           id(rad_haptic_enabled) = true;
-          lv_obj_add_state(id(switch_rad_sound).obj, LV_STATE_CHECKED);
-          lv_obj_add_state(id(switch_rad_haptic).obj, LV_STATE_CHECKED);
+          lv_obj_add_state(id(switch_rad_sound), LV_STATE_CHECKED);
+          lv_obj_add_state(id(switch_rad_haptic), LV_STATE_CHECKED);
 
       # 5. Launch the UI!
       - lvgl.page.show: main_interface
@@ -552,14 +552,14 @@ lvgl:
                             if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
                             
                             // 1. Hide ALL sub-pages
-                            lv_obj_add_flag(id(stat_status_page).obj, LV_OBJ_FLAG_HIDDEN);
-                            lv_obj_add_flag(id(stat_special_page).obj, LV_OBJ_FLAG_HIDDEN);
-                            lv_obj_add_flag(id(stat_perks_page).obj, LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(stat_status_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(stat_special_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(stat_perks_page), LV_OBJ_FLAG_HIDDEN);
                             
                             // 2. Reveal the chosen page
-                            if (btn_id == 0) lv_obj_clear_flag(id(stat_status_page).obj, LV_OBJ_FLAG_HIDDEN);
-                            else if (btn_id == 1) lv_obj_clear_flag(id(stat_special_page).obj, LV_OBJ_FLAG_HIDDEN);
-                            else if (btn_id == 2) lv_obj_clear_flag(id(stat_perks_page).obj, LV_OBJ_FLAG_HIDDEN);
+                            if (btn_id == 0) lv_obj_clear_flag(id(stat_status_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 1) lv_obj_clear_flag(id(stat_special_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 2) lv_obj_clear_flag(id(stat_perks_page), LV_OBJ_FLAG_HIDDEN);
 
                   # --- PAGE 1: STATUS (Visible by default) ---
                   - obj:
@@ -654,14 +654,8 @@ lvgl:
                             y: 20
                             text_color: pip_bright
                             text_font: pip_sub_font
-                            
-                        # Audio Toggle
-                        - label:
-                            text: "AUDIO CLICKS:"
-                            x: 20
-                            y: 80
-                            text_color: pip_unselected
-                            text_font: pip_main_font
+                                  
+                        # --- AUDIO TOGGLE ---
                         - switch:
                             id: switch_rad_sound
                             x: 250
@@ -673,22 +667,16 @@ lvgl:
                               bg_color: pip_bright
                             knob:
                               bg_color: 0x000000
-                            on_turn_on:
-                              - globals.set:
-                                  id: rad_sound_enabled
-                                  value: 'true'
-                            on_turn_off:
-                              - globals.set:
-                                  id: rad_sound_enabled
-                                  value: 'false'
+                            on_value:
+                              - lambda: |-
+                                  id(rad_sound_enabled) = x;
+                                  if (x) {
+                                    id(coproc_uart).write_str("SND:1\n");
+                                  } else {
+                                    id(coproc_uart).write_str("SND:0\n");
+                                  }
                                   
-                        # Haptic Toggle
-                        - label:
-                            text: "HAPTIC FEEDBACK:"
-                            x: 20
-                            y: 140
-                            text_color: pip_unselected
-                            text_font: pip_main_font
+                        # --- HAPTIC TOGGLE ---
                         - switch:
                             id: switch_rad_haptic
                             x: 250
@@ -700,14 +688,14 @@ lvgl:
                               bg_color: pip_bright
                             knob:
                               bg_color: 0x000000
-                            on_turn_on:
-                              - globals.set:
-                                  id: rad_haptic_enabled
-                                  value: 'true'
-                            on_turn_off:
-                              - globals.set:
-                                  id: rad_haptic_enabled
-                                  value: 'false'
+                            on_value:
+                              - lambda: |-
+                                  id(rad_haptic_enabled) = x;
+                                  if (x) {
+                                    id(coproc_uart).write_str("HAP:1\n");
+                                  } else {
+                                    id(coproc_uart).write_str("HAP:0\n");
+                                  }
 
               # --- TAB 2: INV ---
               - name: "INV"
