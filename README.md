@@ -9,6 +9,8 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 * **RFID/NFC:** PN532 module for localized object scanning.
 * **I/O Expansion:** PCF8575 or MCP23017 I/O expander for managing peripherals like rotary encoders and LEDs.
 * **Radiation Sources (x4):** Xiao-ESP32-C3 microcontrollers running `esp32_ble_server`.
+* **Note:** the wiring from the rotary encoder is red/black for the push button switch and blue/green/yellow for the encoder portion. (find ports for this ...  and a use!)
+* **Also Note:** There is a speaker buried in the front panel that I still haven't decided what to do with. 
 
 ## Software & Infrastructure
 * **Framework:** ESPHome integrated with Home Assistant.
