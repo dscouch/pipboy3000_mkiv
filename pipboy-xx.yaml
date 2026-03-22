@@ -509,7 +509,6 @@ lvgl:
               bg_color: 0x000000
               text_color: pip_unselected
               text_font: pip_main_font
-
               items:
                 checked:
                   bg_color: pip_line 
@@ -520,7 +519,7 @@ lvgl:
                 scrollbar_mode: "OFF"
                 widgets:
                   # --- THE SIDE NAVIGATION MENU ---
-                  - buttonmatrix:
+                  - buttonmatrix:  #600x440
                       id: stat_side_menu
                       x: 10
                       y: 20
@@ -542,7 +541,6 @@ lvgl:
                               checked: false
                         - buttons:
                           - text: "PERKS"
-                          - text: "S.P.E.C.I.A.L."
                             control:
                               checkable: true
                               checked: false
@@ -566,8 +564,8 @@ lvgl:
                       id: stat_status_page
                       x: 160
                       y: 10
-                      width: 420
-                      height: 300
+                      width: 460
+                      height: 440
                       bg_color: 0x000000
                       border_width: 0
                       scrollbar_mode: "OFF"
@@ -577,14 +575,14 @@ lvgl:
                         # ==========================================
                         - image:
                             src: anim_vault_boy
-                            x: 220
+                            x: 60
                             y: 80
                         # ==========================================
                         # RAD GAUGE (Stacked Method)
                         # ==========================================
                         - arc:
                             id: rad_arc
-                            x: 400  #was 450
+                            x: 240  #was 450
                             y: 40
                             width: 250
                             height: 250
