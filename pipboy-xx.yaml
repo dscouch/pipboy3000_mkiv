@@ -422,7 +422,7 @@ script:
           lv_obj_add_state(id(switch_rad_haptic), LV_STATE_CHECKED);
 
       # ---> START THE VAULT BOY ANIMATION! <---
-      #- lvgl.animimg.start: vault_boy_anim
+      - lvgl.animimg.start: vault_boy_anim
 
       # 5. Launch the UI!
       - lvgl.page.show: main_interface
@@ -629,40 +629,40 @@ lvgl:
                         # ==========================================
                         # ANIMATED VAULT BOY
                         # ==========================================
-                        # - animimg:
-                        #     id: vault_boy_anim
-                        #     x: 60 
-                        #     y: 80
-                        #     # Update width/height to match your PNG's actual pixel size!
-                        #     width: 117 
-                        #     height: 200
-                        #     # Total time to play all 16 frames. 1600ms = 10 frames per second
-                        #     duration: 1600ms 
-                        #     src:
-                        #       - vb00
-                        #       - vb01
-                        #       - vb02
-                        #       - vb03
-                        #       - vb04
-                        #       - vb05
-                        #       - vb06
-                        #       - vb07
-                        #       - vb08
-                        #       - vb09
-                        #       - vb10
-                        #       - vb11
-                        #       - vb12
-                        #       - vb13
-                        #       - vb14
-                        #       - vb15
-                        # --- 1. VAULT BOY (STATIC TEST) ---
-                        - image:
-                            id: vault_boy_static
-                            src: vb00  # Just load the very first frame!
+                        - animimg:
+                            id: vault_boy_anim
                             x: 60 
                             y: 80
+                            # Update width/height to match your PNG's actual pixel size!
                             width: 117 
                             height: 200
+                            # Total time to play all 16 frames. 1600ms = 10 frames per second
+                            duration: 1600ms 
+                            src:
+                              - vb00
+                              - vb01
+                              - vb02
+                              - vb03
+                              - vb04
+                              - vb05
+                              - vb06
+                              - vb07
+                              - vb08
+                              - vb09
+                              - vb10
+                              - vb11
+                              - vb12
+                              - vb13
+                              - vb14
+                              - vb15
+                        # --- 1. VAULT BOY (STATIC TEST) ---
+                        # - image:
+                        #     id: vault_boy_static
+                        #     src: vb00  # Just load the very first frame!
+                        #     x: 60 
+                        #     y: 80
+                        #     width: 117 
+                        #     height: 200
 
                         # ==========================================
                         # RAD GAUGE (Stacked Method)
@@ -712,6 +712,7 @@ lvgl:
                       bg_color: 0x000000
                       border_width: 0
                       hidden: true 
+                      scrollable: false
                       scrollbar_mode: "OFF"
                       widgets:
                         - label:
@@ -731,14 +732,15 @@ lvgl:
                       bg_color: 0x000000
                       border_width: 0
                       hidden: true 
+                      scrollable: false
                       scrollbar_mode: "OFF"
                       widgets:
                         - label:
                             text: "GEIGER COUNTER SETTINGS"
-                            x: 20
-                            y: 20
+                            x: 5
+                            y: 15
                             text_color: pip_bright
-                            text_font: pip_sub_font
+                            text_font: pip_main_font
                                   
                         # --- AUDIO TOGGLE ---
                         - switch:
@@ -781,12 +783,23 @@ lvgl:
                                   } else {
                                     id(coproc_uart).write_str("HAP:0\n");
                                   }
-
+                        - label:
+                            x: 150
+                            y: 75
+                            text: "SOUND:"
+                            text_color: pip_bright
+                            text_font: pip_sub_font
+                        - label:
+                            x: 110
+                            y: 135
+                            text: "VIBRATE:"
+                            text_color: pip_bright
+                            text_font: pip_sub_font
               # --- TAB 2: INV ---
               - name: "INV"
                 widgets:
                   - bar:
-                      x: 550
+                      x: 100
                       y: 20
                       width: 20
                       height: 200
@@ -798,6 +811,7 @@ lvgl:
               # --- TAB 3: DATA (Memory Core) ---
               - name: "DATA"
                 # Kill scrollbars on this specific page too
+                scrollable: false
                 scrollbar_mode: "OFF"
                 widgets:
                   - label:
@@ -936,6 +950,7 @@ lvgl:
 
               # --- TAB 4: MAP ---
               - name: "MAP"
+                scrollable: false
                 widgets:
                   - switch:
                       x: 50
