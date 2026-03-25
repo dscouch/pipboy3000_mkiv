@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.2.3-LVGL"
+  pip_version: "v2.2.4-LVGL"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -276,53 +276,63 @@ font:
 # =========================================
 image:
   - file: "images/vb00.png"
-    type: binary
+    type: rgb565
     id: vb00
   - file: "images/vb01.png"
-    type: binary
+    type: rgb565
     id: vb01
   - file: "images/vb02.png"
-    type: binary
+    type: rgb565
     id: vb02
   - file: "images/vb03.png"
-    type: binary
+    type: rgb565
     id: vb03
   - file: "images/vb04.png"
-    type: binary
+    type: rgb565
     id: vb04
   - file: "images/vb05.png"
-    type: binary
+    type: rgb565
     id: vb05
   - file: "images/vb06.png"
-    type: binary
+    type: rgb565
     id: vb06
   - file: "images/vb07.png"
-    type: binary
+    type: rgb565
     id: vb07
   - file: "images/vb08.png"
-    type: binary
+    type: rgb565
     id: vb08
   - file: "images/vb09.png"
-    type: binary
+    type: rgb565
     id: vb09
   - file: "images/vb10.png"
-    type: binary
+    type: rgb565
     id: vb10
   - file: "images/vb11.png"
-    type: binary
+    type: rgb565
     id: vb11
   - file: "images/vb12.png"
-    type: binary
+    type: rgb565
     id: vb12
   - file: "images/vb13.png"
     id: vb13
-    type: binary
+    type: rgb565
   - file: "images/vb14.png"
     id: vb14
-    type: binary
+    type: rgb565
   - file: "images/vb15.png"
     id: vb15
-    type: binary
+    type: rgb565
+# --- MAP IMAGES ---
+  - file: "images/map1.jpg"
+    id: map_img_1
+    type: rgb565
+  - file: "images/map2.jpg"
+    id: map_img_2
+    type: rgb565
+  - file: "images/map3.jpg"
+    id: map_img_3
+    type: rgb565
 
 # =========================================
 # SYSTEM SCRIPTS
@@ -414,6 +424,18 @@ script:
           // Highlight checked state
           lv_obj_set_style_bg_color(id(stat_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
           lv_obj_set_style_text_color(id(stat_side_menu).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS | LV_STATE_CHECKED);
+
+          // 3. Style the new MAP side menu & inject Dynamic Doc Labels
+          lv_obj_set_style_bg_color(id(map_side_menu).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
+          lv_obj_set_style_text_color(id(map_side_menu).obj, lv_color_hex(0x009900), LV_PART_ITEMS); 
+          lv_obj_set_style_border_width(id(map_side_menu).obj, 0, LV_PART_ITEMS);
+          lv_obj_set_style_bg_color(id(map_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
+          lv_obj_set_style_text_color(id(map_side_menu).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS | LV_STATE_CHECKED);
+
+          static const char * doc_1_str = (std::string("${dweller_id}") == "793") ? "DOC 1" : "DOC 3";
+          static const char * doc_2_str = (std::string("${dweller_id}") == "793") ? "DOC 2" : "DOC 4";
+          static const char * map_labels[] = {"MAP 1", "\n", "MAP 2", "\n", "MAP 3", "\n", doc_1_str, "\n", doc_2_str, ""};
+          lv_btnmatrix_set_map(id(map_side_menu).obj, map_labels);
 
           // 2. Enable the Geiger Counter settings & flip the UI switches!
           id(rad_sound_enabled) = true;
@@ -952,16 +974,164 @@ lvgl:
               - name: "MAP"
                 scrollable: false
                 widgets:
-                  - switch:
-                      x: 50
-                      y: 50
-                      width: 60
-                      height: 30
-                      bg_color: pip_line
-                      indicator:
-                        bg_color: pip_bright
-                      knob:
-                        bg_color: pip_bright
+                  # --- THE MAP SIDE NAVIGATION MENU ---
+                  - buttonmatrix: 
+                      id: map_side_menu
+                      x: 10
+                      y: 20
+                      width: 140
+                      height: 250
+                      one_checked: true
+                      bg_color: 0x000000
+                      border_width: 0
+                      # Temporary labels. The boot sequence C++ will override DOC A & B
+                      rows:
+                        - buttons:
+                          - text: "MAP 1"
+                            control: { checkable: true, checked: true }
+                        - buttons:
+                          - text: "MAP 2"
+                            control: { checkable: true, checked: false }
+                        - buttons:
+                          - text: "MAP 3"
+                            control: { checkable: true, checked: false }
+                        - buttons:
+                          - text: "DOC A"
+                            control: { checkable: true, checked: false }
+                        - buttons:
+                          - text: "DOC B"
+                            control: { checkable: true, checked: false }
+                      on_click:
+                        - lambda: |-
+                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(map_side_menu).obj);
+                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
+                            
+                            // 1. Hide ALL sub-pages
+                            lv_obj_add_flag(id(map1_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(map2_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(map3_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(doc_a_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(doc_b_page), LV_OBJ_FLAG_HIDDEN);
+                            
+                            // 2. Reveal the chosen page
+                            if (btn_id == 0) lv_obj_clear_flag(id(map1_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 1) lv_obj_clear_flag(id(map2_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 2) lv_obj_clear_flag(id(map3_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 3) lv_obj_clear_flag(id(doc_a_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 4) lv_obj_clear_flag(id(doc_b_page), LV_OBJ_FLAG_HIDDEN);
+
+# --- MAP 1 PAGE (Visible by default) ---
+                  - obj:
+                      id: map1_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      scrollable: false
+                      widgets:
+                        - label:
+                            text: "FLOOR PLAN 1"
+                            x: 120
+                            y: 10
+                            text_color: pip_bright
+                            text_font: pip_main_font
+                        
+                        # 1. THE MAP BACKGROUND
+                        - image:
+                            src: map_img_1
+                            x: 10
+                            y: 50  # Shifted down to clear the title text
+                            
+                        # 2. THE RED RADIATION INDICATOR (Drawn on top!)
+                        - obj:
+                            id: map1_rad_led
+                            x: 200  # Adjust X/Y to position the dot over the right room
+                            y: 150
+                            width: 20
+                            height: 20
+                            bg_color: pip_alert
+                            border_width: 0
+                            radius: 10
+
+                  # --- MAP 2 PAGE (Hidden) ---
+                  - obj:
+                      id: map2_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true
+                      scrollable: false
+                      widgets:
+                        - label: { text: "FLOOR PLAN 2", x: 120, y: 10, text_color: pip_bright, text_font: pip_main_font }
+                        - image: { src: map_img_2, x: 10, y: 50 }
+                        - obj: { id: map2_rad_led, x: 100, y: 250, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+
+                  # --- MAP 3 PAGE (Hidden) ---
+                  - obj:
+                      id: map3_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true
+                      scrollable: false
+                      widgets:
+                        - label: { text: "FLOOR PLAN 3", x: 120, y: 10, text_color: pip_bright, text_font: pip_main_font }
+                        - image: { src: map_img_3, x: 10, y: 50 }
+                        - obj: { id: map3_rad_led, x: 300, y: 100, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+
+                  # --- DOC A PAGE (Hidden) ---
+                  - obj:
+                      id: doc_a_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true
+                      scrollable: true  # Enabled scrolling for text docs!
+                      scrollbar_mode: "AUTO"
+                      widgets:
+                        - label:
+                            id: doc_a_text
+                            text: "AWAITING KTANE UPLINK..."
+                            x: 5
+                            y: 5
+                            width: 400
+                            long_mode: "WRAP"
+                            text_color: pip_bright
+                            text_font: pip_sub_font
+
+                  # --- DOC B PAGE (Hidden) ---
+                  - obj:
+                      id: doc_b_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true
+                      scrollable: true
+                      scrollbar_mode: "AUTO"
+                      widgets:
+                        - label:
+                            id: doc_b_text
+                            text: "AWAITING KTANE UPLINK..."
+                            x: 5
+                            y: 5
+                            width: 400
+                            long_mode: "WRAP"
+                            text_color: pip_bright
+                            text_font: pip_sub_font
 
     # ==========================================
     # PAGE 2: THE MELTDOWN SEQUENCE (Hidden)
