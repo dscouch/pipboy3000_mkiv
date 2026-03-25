@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.3.0-LVGL"
+  pip_version: "v2.3.7"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -398,30 +398,8 @@ script:
       # Hold the image on screen for a few seconds before loading the UI
       - delay: 5s
 
-      # 4. INITIALIZE GRIDS & COLORS BEFORE SHOWING THE UI!
+      # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
       - lambda: |-
-          //Configure the button style for the Data grid
-          lv_obj_set_style_bg_color(id(memory_core_grid).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
-          lv_obj_set_style_text_color(id(memory_core_grid).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS);
-          lv_obj_set_style_border_color(id(memory_core_grid).obj, lv_color_hex(0x003300), LV_PART_ITEMS);
-          lv_obj_set_style_border_width(id(memory_core_grid).obj, 2, LV_PART_ITEMS);
-          // NEW: Kill the drop shadow
-          lv_obj_set_style_shadow_width(id(memory_core_grid).obj, 0, LV_PART_ITEMS);
-          
-          lv_obj_set_style_bg_color(id(modifier_grid).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
-          lv_obj_set_style_text_color(id(modifier_grid).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS);
-          lv_obj_set_style_border_color(id(modifier_grid).obj, lv_color_hex(0x003300), LV_PART_ITEMS);
-          lv_obj_set_style_border_width(id(modifier_grid).obj, 2, LV_PART_ITEMS);
-          // NEW: Kill the drop shadow
-          lv_obj_set_style_shadow_width(id(modifier_grid).obj, 0, LV_PART_ITEMS);
-
-          // ---> FORCE THE TAB UNDERLINE COLOR <---
-          lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
-          
-          // Target the indicator ONLY when it is in the active/checked state
-          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), LV_PART_INDICATOR | LV_STATE_CHECKED);
-          lv_obj_set_style_height(tab_btns, 2, LV_PART_INDICATOR | LV_STATE_CHECKED);
-
           // Generate the initial text map with the brackets
           static char init_labels[16][8];
           static const char *init_map[21]; 
@@ -440,46 +418,34 @@ script:
           init_map[p] = ""; 
           lv_btnmatrix_set_map(id(memory_core_grid).obj, init_map);
 
-          // Style the new STAT side menu (green borders, green highlight!)
-          lv_obj_set_style_bg_color(id(stat_side_menu).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
-          lv_obj_set_style_text_color(id(stat_side_menu).obj, lv_color_hex(0x009900), LV_PART_ITEMS); 
-          lv_obj_set_style_border_color(id(stat_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS);
-          lv_obj_set_style_border_width(id(stat_side_menu).obj, 2, LV_PART_ITEMS);
-          // NEW: Kill the drop shadow
-          lv_obj_set_style_shadow_width(id(stat_side_menu).obj, 0, LV_PART_ITEMS);
-          // Highlight checked state
-          lv_obj_set_style_bg_color(id(stat_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
-          lv_obj_set_style_text_color(id(stat_side_menu).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS | LV_STATE_CHECKED);
-
-          // Style the new MAP side menu & inject Dynamic Doc Labels
-          lv_obj_set_style_bg_color(id(map_side_menu).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
-          lv_obj_set_style_text_color(id(map_side_menu).obj, lv_color_hex(0x009900), LV_PART_ITEMS); 
-          lv_obj_set_style_border_color(id(map_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS);
-          lv_obj_set_style_border_width(id(map_side_menu).obj, 2, LV_PART_ITEMS);
-          // Kill the drop shadow
-          lv_obj_set_style_shadow_width(id(map_side_menu).obj, 0, LV_PART_ITEMS);
-          // Highlight checked state
-          lv_obj_set_style_bg_color(id(map_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
-          lv_obj_set_style_text_color(id(map_side_menu).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS | LV_STATE_CHECKED);
-
+          // Inject Dynamic Doc Labels into Map Menu
           static const char * doc_1_str = (std::string("${dweller_id}") == "793") ? "DOC 1" : "DOC 3";
           static const char * doc_2_str = (std::string("${dweller_id}") == "793") ? "DOC 2" : "DOC 4";
           static const char * map_labels[] = {"MAP 1", "\n", "MAP 2", "\n", "MAP 3", "\n", doc_1_str, "\n", doc_2_str, ""};
           lv_btnmatrix_set_map(id(map_side_menu).obj, map_labels);
 
-          // 2. Enable the Geiger Counter settings & flip the UI switches!
+          // Enable the Geiger Counter settings & flip the UI switches!
           id(rad_sound_enabled) = true;
           id(rad_haptic_enabled) = true;
           lv_obj_add_state(id(switch_rad_sound), LV_STATE_CHECKED);
           lv_obj_add_state(id(switch_rad_haptic), LV_STATE_CHECKED);
+
+      # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
+      - lambda: |-
+          // ---> FORCE THE TAB UNDERLINE COLOR <---
+          // (YAML doesn't support LV_PART_INDICATOR on tabviews yet)
+          lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
+          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), LV_PART_INDICATOR | LV_STATE_CHECKED);
+          lv_obj_set_style_height(tab_btns, 2, LV_PART_INDICATOR | LV_STATE_CHECKED);
+
+          // Generate the initial text map with the brackets
+          static char init_labels[16][8];
 
       # ---> START THE VAULT BOY ANIMATION! <---
       - lvgl.animimg.start: vault_boy_anim
 
       # 5. Launch the UI!
       - lvgl.page.show: main_interface
-
-
 
 # =========================================
 # SENSORS (Abridged to essentials for compilation)
@@ -540,6 +506,49 @@ lvgl:
     - my_touch
   bg_color: 0x000000
 
+  # =========================================
+  # GLOBAL LVGL STYLES & THEMES
+  # =========================================
+  theme:
+    label:
+      text_font: pip_main_font
+      text_color: pip_bright
+    button:
+      bg_color: 0x000000
+      shadow_width: 0
+      border_color: pip_unselected
+      border_width: 1
+      text_font: pip_sub_font
+      text_color: pip_unselected
+      pressed: # set some button colors to be different in pressed state
+        bg_color: 0x006600
+        text_color: pip_bright
+      checked: # set some button colors to be different in checked state
+        bg_color: 0x006600
+        text_color: pip_bright
+    buttonmatrix:
+      bg_color: 0x000000
+      border_width: 0
+      items:
+        bg_color: 0x000000
+        text_color: 0x009900  
+        text_font: pip_main_font
+        border_color: 0x003300
+        border_width: 2
+        shadow_width: 0
+        # State modifiers go HERE, where the style is applied!
+        checked:
+          bg_color: 0x003300
+          text_color: pip_bright
+    switch:
+      bg_color: pip_line
+      indicator:
+        bg_color: pip_line
+        checked:
+          bg_color: pip_bright
+      knob:
+        bg_color: 0x000000
+
   pages:
     # ==========================================
     # PAGE 0: THE ROBCO BOOT SEQUENCE
@@ -554,7 +563,6 @@ lvgl:
             x: 220      # Gives it a nice command-line margin
             y: 20
             width: 560 # Keeps it from wrapping off-screen
-            text_color: pip_bright
             text_font: pip_sub_font
         
         # --- NEW: BOOT LOGO ---
@@ -577,14 +585,10 @@ lvgl:
             text: "HP:"
             x: 240
             y: 445
-            text_color: pip_bright
-            text_font: pip_main_font
         - label:
             text: "100"
             x: 290
             y: 445
-            text_color: pip_bright
-            text_font: pip_main_font
             
         - label:
             text: ${pip_version}
@@ -599,16 +603,12 @@ lvgl:
             text: "XP:"
             x: 672
             y: 445
-            text_color: pip_bright
-            text_font: pip_main_font
         - label:
             text: "0"
             x: 722
             y: 445
-            text_color: pip_bright
-            text_font: pip_main_font
 
-        # --- THE MAIN TABVIEW (Shifted +192px to the right) ---
+# --- THE MAIN TABVIEW ---
         - tabview:
             id: main_tabs
             x: 200
@@ -617,15 +617,24 @@ lvgl:
             height: 440 
             bg_color: 0x000000
             scrollable: false 
+            
+            # Target the tab buttons directly on the widget
             tab_style:
               bg_color: 0x000000
               text_color: pip_unselected
               text_font: pip_main_font
+              border_width: 0
               items:
+                shadow_width: 0
+                outline_width: 0  # <-- Kills the blue default focus ring
+                border_width: 0
                 checked:
-                  # Set the active tab background to match your sub-menu!
-                  bg_color: 0x003300 
+                  bg_color: 0x006600  # Dark green active background
                   text_color: pip_bright
+                focused:
+                  outline_width: 0  # Belt and suspenders against the blue ring
+                  shadow_width: 0
+                  border_width: 0
 
             tabs:
               # --- TAB 1: STAT ---
@@ -637,11 +646,11 @@ lvgl:
                       id: stat_side_menu
                       x: 10
                       y: 20
-                      width: 140
+                      width: 150
                       height: 150
                       one_checked: true
-                      bg_color: 0x000000
-                      border_width: 0
+                      items:
+                        text_font: pip_sub_font
                       rows:
                         - buttons:
                           - text: "STATUS"
@@ -649,7 +658,7 @@ lvgl:
                               checkable: true
                               checked: true
                         - buttons:
-                          - text: "S.P.E.C.I.A.L."
+                          - text: "SPECIAL"
                             control:
                               checkable: true
                               checked: false
@@ -742,15 +751,12 @@ lvgl:
                                   x: 70
                                   y: 100
                                   text: "RADS"
-                                  text_color: pip_bright
                                   text_font: pip_sub_font
                               - label:
                                   id: rad_label
                                   x: 80
                                   y: 125
                                   text: "0"
-                                  text_color: pip_bright
-                                  text_font: pip_main_font
 
                   # --- PAGE 2: S.P.E.C.I.A.L. (Hidden by default) ---
                   - obj:
@@ -758,7 +764,7 @@ lvgl:
                       x: 160
                       y: 10
                       width: 420
-                      height: 300
+                      height: 340
                       bg_color: 0x000000
                       border_width: 0
                       hidden: true 
@@ -767,10 +773,8 @@ lvgl:
                       widgets:
                         - label:
                             text: "STR: 5\nPER: 6\nEND: 4\nCHA: 8\nINT: 7\nAGI: 4\nLUK: 9"
-                            x: 20
-                            y: 20
-                            text_color: pip_bright
-                            text_font: pip_main_font
+                            x: 275
+                            y: 0
 
                   # --- PAGE 3: PERKS (Hidden by default) ---
                   - obj:
@@ -789,8 +793,6 @@ lvgl:
                             text: "GEIGER COUNTER"
                             x: 100
                             y: 15
-                            text_color: pip_bright
-                            text_font: pip_main_font
                                   
                         # --- AUDIO TOGGLE ---
                         - switch:
@@ -799,13 +801,6 @@ lvgl:
                             y: 75
                             width: 60
                             height: 30
-                            bg_color: pip_line
-                            indicator:
-                              bg_color: pip_line  # Color when OFF
-                              checked:
-                                bg_color: pip_bright  # Bright green when ON
-                            knob:
-                              bg_color: 0x000000
 
                             on_value:
                               - lambda: |-
@@ -823,13 +818,7 @@ lvgl:
                             y: 135
                             width: 60
                             height: 30
-                            bg_color: pip_line
-                            indicator:
-                              bg_color: pip_line  # Color when OFF
-                              checked:
-                                bg_color: pip_bright  # Bright green when ON
-                            knob:
-                              bg_color: 0x000000
+
                             on_value:
                               - lambda: |-
                                   id(rad_haptic_enabled) = x;
@@ -842,13 +831,11 @@ lvgl:
                             x: 150
                             y: 75
                             text: "SOUND:"
-                            text_color: pip_bright
                             text_font: pip_sub_font
                         - label:
                             x: 120
                             y: 135
                             text: "VIBRATE:"
-                            text_color: pip_bright
                             text_font: pip_sub_font
               # --- TAB 2: INV ---
               - name: "INV"
@@ -867,14 +854,12 @@ lvgl:
               - name: "DATA"
                 # Kill scrollbars on this specific page too
                 scrollable: false
-                scrollbar_mode: "OFF"
                 widgets:
                   - label:
                       text: "MEMORY CORE REPAIR"
                       x: 150
                       y: 10
-                      text_color: pip_bright
-                      text_font: pip_main_font
+
                   - label:
                       text: "TARGET PARITY: 0x1E"
                       x: 180
@@ -889,8 +874,9 @@ lvgl:
                       y: 60
                       width: 420
                       height: 220
-                      bg_color: 0x000000
-                      border_width: 0
+                      items:
+                        text_color: pip_bright
+
                       rows:
                         - buttons:
                           - text: "00"
@@ -966,7 +952,7 @@ lvgl:
                       id: modifier_grid
                       x: 460
                       y: 60
-                      width: 60
+                      width: 100
                       height: 140
                       one_checked: true 
                       bg_color: 0x000000
@@ -987,14 +973,14 @@ lvgl:
                       id: btn_remote_uplink
                       x: 460
                       y: 220
-                      width: 60
-                      height: 60
+                      width: 100
+                      height: 50
                       bg_color: 0x000000
                       border_width: 2
                       border_color: pip_line
                       widgets:
                         - label:
-                            text: "UPLNK\n 612"
+                            text: "00"
                             align: CENTER
                             text_color: pip_bright
                             text_font: pip_sub_font
@@ -1015,8 +1001,8 @@ lvgl:
                       width: 140
                       height: 250
                       one_checked: true
-                      bg_color: 0x000000
-                      border_width: 0
+                      items:
+                        text_font: pip_sub_font
                       # Temporary labels. The boot sequence C++ will override DOC A & B
                       rows:
                         - buttons:
@@ -1068,8 +1054,6 @@ lvgl:
                             text: "FLOOR PLAN 1"
                             x: 120
                             y: 10
-                            text_color: pip_bright
-                            text_font: pip_main_font
                         
                         # 1. THE MAP BACKGROUND
                         - image:
@@ -1100,7 +1084,7 @@ lvgl:
                       hidden: true
                       scrollable: false
                       widgets:
-                        - label: { text: "FLOOR PLAN 2", x: 120, y: 10, text_color: pip_bright, text_font: pip_main_font }
+                        - label: { text: "FLOOR PLAN 2", x: 120, y: 10 }
                         - image: { src: map_img_2, x: 10, y: 50 }
                         - obj: { id: map2_rad_led, x: 360, y: 80, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
 
@@ -1116,10 +1100,10 @@ lvgl:
                       hidden: true
                       scrollable: false
                       widgets:
-                        - label: { text: "FLOOR PLAN 3", x: 120, y: 10, text_color: pip_bright, text_font: pip_main_font }
+                        - label: { text: "FLOOR PLAN 3", x: 120, y: 10 }
                         - image: { src: map_img_3, x: 10, y: 50 }
                         - obj: { id: map3_rad_led, x: 280, y: 250, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
-                        - obj: { id: map3_rad2_led, x: 80, y: 95, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+                        - obj: { id: map3_rad2_led, x: 85, y: 105, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
 
                   # --- DOC A PAGE (Hidden) ---
                   - obj:
@@ -1141,7 +1125,6 @@ lvgl:
                             y: 5
                             width: 400
                             long_mode: "WRAP"
-                            text_color: pip_bright
                             text_font: pip_sub_font
 
                   # --- DOC B PAGE (Hidden) ---
@@ -1164,7 +1147,6 @@ lvgl:
                             y: 5
                             width: 400
                             long_mode: "WRAP"
-                            text_color: pip_bright
                             text_font: pip_sub_font
 
     # ==========================================
