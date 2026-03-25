@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.2.4-LVGL"
+  pip_version: "v2.2.7-LVGL"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -275,6 +275,11 @@ font:
 # IMAGES & ANIMATIONS
 # =========================================
 image:
+  # Vault boy boot image
+  - file: "images/vaultboy_thumbsup.jpg"
+    id: img_vaultboy_thumbsup
+    type: rgb565
+  # Vault boy walking animation
   - file: "images/vb00.png"
     type: rgb565
     id: vb00
@@ -382,22 +387,44 @@ script:
       # 3. Hold for dramatic effect when finished
       - delay: 2s  #5s to be annoying
       
+      # --- NEW: SWAP TO THE THUMBS UP IMAGE ---
+      - lambda: |-
+          // Hide the text block
+          lv_obj_add_flag(id(ui_boot_text), LV_OBJ_FLAG_HIDDEN);
+          
+          // Unhide the thumbs up image
+          lv_obj_clear_flag(id(ui_boot_image), LV_OBJ_FLAG_HIDDEN);
+          
+      # Hold the image on screen for a few seconds before loading the UI
+      - delay: 5s
+
       # 4. INITIALIZE GRIDS & COLORS BEFORE SHOWING THE UI!
       - lambda: |-
-          // Force the individual buttons to be Black with Green Text
+          //Configure the button style for the Data grid
           lv_obj_set_style_bg_color(id(memory_core_grid).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
           lv_obj_set_style_text_color(id(memory_core_grid).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS);
           lv_obj_set_style_border_color(id(memory_core_grid).obj, lv_color_hex(0x003300), LV_PART_ITEMS);
           lv_obj_set_style_border_width(id(memory_core_grid).obj, 2, LV_PART_ITEMS);
+          // NEW: Kill the drop shadow
+          lv_obj_set_style_shadow_width(id(memory_core_grid).obj, 0, LV_PART_ITEMS);
           
           lv_obj_set_style_bg_color(id(modifier_grid).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
           lv_obj_set_style_text_color(id(modifier_grid).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS);
           lv_obj_set_style_border_color(id(modifier_grid).obj, lv_color_hex(0x003300), LV_PART_ITEMS);
           lv_obj_set_style_border_width(id(modifier_grid).obj, 2, LV_PART_ITEMS);
+          // NEW: Kill the drop shadow
+          lv_obj_set_style_shadow_width(id(modifier_grid).obj, 0, LV_PART_ITEMS);
 
           // ---> HERE IS THE TABVIEW RECOLOR CODE! <---
           lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
-          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), LV_PART_INDICATOR);
+          
+          // 1. Style the Underline (The "Indicator")
+          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), LV_PART_INDICATOR); // Bright Green
+          lv_obj_set_style_height(tab_btns, 2, LV_PART_INDICATOR);                        // Skinnier 2px width
+          
+          // 2. Style the Selected Tab Background
+          // Matches the dark green (0x003300) used in the STAT/MAP side menus
+          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
 
           // Generate the initial text map with the brackets
           static char init_labels[16][8];
@@ -417,18 +444,25 @@ script:
           init_map[p] = ""; 
           lv_btnmatrix_set_map(id(memory_core_grid).obj, init_map);
 
-          // 1. Style the new STAT side menu (No borders, green highlight!)
+          // Style the new STAT side menu (green borders, green highlight!)
           lv_obj_set_style_bg_color(id(stat_side_menu).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
           lv_obj_set_style_text_color(id(stat_side_menu).obj, lv_color_hex(0x009900), LV_PART_ITEMS); 
-          lv_obj_set_style_border_width(id(stat_side_menu).obj, 0, LV_PART_ITEMS);
+          lv_obj_set_style_border_color(id(stat_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS);
+          lv_obj_set_style_border_width(id(stat_side_menu).obj, 2, LV_PART_ITEMS);
+          // NEW: Kill the drop shadow
+          lv_obj_set_style_shadow_width(id(stat_side_menu).obj, 0, LV_PART_ITEMS);
           // Highlight checked state
           lv_obj_set_style_bg_color(id(stat_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
           lv_obj_set_style_text_color(id(stat_side_menu).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS | LV_STATE_CHECKED);
 
-          // 3. Style the new MAP side menu & inject Dynamic Doc Labels
+          // Style the new MAP side menu & inject Dynamic Doc Labels
           lv_obj_set_style_bg_color(id(map_side_menu).obj, lv_color_hex(0x000000), LV_PART_ITEMS);
           lv_obj_set_style_text_color(id(map_side_menu).obj, lv_color_hex(0x009900), LV_PART_ITEMS); 
-          lv_obj_set_style_border_width(id(map_side_menu).obj, 0, LV_PART_ITEMS);
+          lv_obj_set_style_border_color(id(map_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS);
+          lv_obj_set_style_border_width(id(map_side_menu).obj, 2, LV_PART_ITEMS);
+          // Kill the drop shadow
+          lv_obj_set_style_shadow_width(id(map_side_menu).obj, 0, LV_PART_ITEMS);
+          // Highlight checked state
           lv_obj_set_style_bg_color(id(map_side_menu).obj, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
           lv_obj_set_style_text_color(id(map_side_menu).obj, lv_color_hex(0x00FF00), LV_PART_ITEMS | LV_STATE_CHECKED);
 
@@ -514,6 +548,7 @@ lvgl:
     # ==========================================
     # PAGE 0: THE ROBCO BOOT SEQUENCE
     # ==========================================
+
     - id: boot_screen
       bg_color: 0x000000
       widgets:
@@ -525,6 +560,13 @@ lvgl:
             width: 560 # Keeps it from wrapping off-screen
             text_color: pip_bright
             text_font: pip_sub_font
+        
+        # --- NEW: BOOT LOGO ---
+        - image:
+            id: ui_boot_image
+            src: img_vaultboy_thumbsup
+            align: CENTER
+            hidden: true  # Hide it while the text is typing
 
     # ==========================================
     # PAGE 1: THE MAIN PIP-BOY INTERFACE
@@ -644,7 +686,7 @@ lvgl:
                       y: 10
                       width: 460
                       height: 440
-                      bg_color: 0x333333 #0x000000
+                      bg_color: 0x000000
                       border_width: 0
                       scrollable: false
                       widgets:
@@ -677,14 +719,6 @@ lvgl:
                               - vb13
                               - vb14
                               - vb15
-                        # --- 1. VAULT BOY (STATIC TEST) ---
-                        # - image:
-                        #     id: vault_boy_static
-                        #     src: vb00  # Just load the very first frame!
-                        #     x: 60 
-                        #     y: 80
-                        #     width: 117 
-                        #     height: 200
 
                         # ==========================================
                         # RAD GAUGE (Stacked Method)
@@ -1047,8 +1081,8 @@ lvgl:
                         # 2. THE RED RADIATION INDICATOR (Drawn on top!)
                         - obj:
                             id: map1_rad_led
-                            x: 200  # Adjust X/Y to position the dot over the right room
-                            y: 150
+                            x: 30  # Adjust X/Y to position the dot over the right room
+                            y: 210
                             width: 20
                             height: 20
                             bg_color: pip_alert
@@ -1069,7 +1103,7 @@ lvgl:
                       widgets:
                         - label: { text: "FLOOR PLAN 2", x: 120, y: 10, text_color: pip_bright, text_font: pip_main_font }
                         - image: { src: map_img_2, x: 10, y: 50 }
-                        - obj: { id: map2_rad_led, x: 100, y: 250, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+                        - obj: { id: map2_rad_led, x: 360, y: 80, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
 
                   # --- MAP 3 PAGE (Hidden) ---
                   - obj:
@@ -1085,7 +1119,8 @@ lvgl:
                       widgets:
                         - label: { text: "FLOOR PLAN 3", x: 120, y: 10, text_color: pip_bright, text_font: pip_main_font }
                         - image: { src: map_img_3, x: 10, y: 50 }
-                        - obj: { id: map3_rad_led, x: 300, y: 100, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+                        - obj: { id: map3_rad_led, x: 280, y: 250, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+                        - obj: { id: map3_rad2_led, x: 70, y: 85, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
 
                   # --- DOC A PAGE (Hidden) ---
                   - obj:
