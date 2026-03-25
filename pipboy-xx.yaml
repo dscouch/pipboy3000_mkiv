@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.2.7-LVGL"
+  pip_version: "v2.3.0-LVGL"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -415,16 +415,12 @@ script:
           // NEW: Kill the drop shadow
           lv_obj_set_style_shadow_width(id(modifier_grid).obj, 0, LV_PART_ITEMS);
 
-          // ---> HERE IS THE TABVIEW RECOLOR CODE! <---
+          // ---> FORCE THE TAB UNDERLINE COLOR <---
           lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
           
-          // 1. Style the Underline (The "Indicator")
-          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), LV_PART_INDICATOR); // Bright Green
-          lv_obj_set_style_height(tab_btns, 2, LV_PART_INDICATOR);                        // Skinnier 2px width
-          
-          // 2. Style the Selected Tab Background
-          // Matches the dark green (0x003300) used in the STAT/MAP side menus
-          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x003300), LV_PART_ITEMS | LV_STATE_CHECKED);
+          // Target the indicator ONLY when it is in the active/checked state
+          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), LV_PART_INDICATOR | LV_STATE_CHECKED);
+          lv_obj_set_style_height(tab_btns, 2, LV_PART_INDICATOR | LV_STATE_CHECKED);
 
           // Generate the initial text map with the brackets
           static char init_labels[16][8];
@@ -565,7 +561,8 @@ lvgl:
         - image:
             id: ui_boot_image
             src: img_vaultboy_thumbsup
-            align: CENTER
+            x: 220      # Gives it a nice command-line margin
+            y: 20
             hidden: true  # Hide it while the text is typing
 
     # ==========================================
@@ -619,7 +616,6 @@ lvgl:
             width: 600
             height: 440 
             bg_color: 0x000000
-            # Kill the scrollbars globally for the tabs
             scrollable: false 
             tab_style:
               bg_color: 0x000000
@@ -627,8 +623,10 @@ lvgl:
               text_font: pip_main_font
               items:
                 checked:
-                  bg_color: pip_line 
+                  # Set the active tab background to match your sub-menu!
+                  bg_color: 0x003300 
                   text_color: pip_bright
+
             tabs:
               # --- TAB 1: STAT ---
               - name: "STAT"
@@ -674,11 +672,7 @@ lvgl:
                             if (btn_id == 0) lv_obj_clear_flag(id(stat_status_page), LV_OBJ_FLAG_HIDDEN);
                             else if (btn_id == 1) lv_obj_clear_flag(id(stat_special_page), LV_OBJ_FLAG_HIDDEN);
                             else if (btn_id == 2) lv_obj_clear_flag(id(stat_perks_page), LV_OBJ_FLAG_HIDDEN);
-                        # - if:
-                        #     condition:
-                        #       lambda: 'return lv_btnmatrix_get_selected_btn(id(stat_side_menu).obj) == 0;'
-                        #     then:
-                        #       - lvgl.animimg.start: vault_boy_anim
+
                   # --- PAGE 1: STATUS (Visible by default) ---
                   - obj:
                       id: stat_status_page
@@ -792,8 +786,8 @@ lvgl:
                       scrollbar_mode: "OFF"
                       widgets:
                         - label:
-                            text: "GEIGER COUNTER SETTINGS"
-                            x: 5
+                            text: "GEIGER COUNTER"
+                            x: 100
                             y: 15
                             text_color: pip_bright
                             text_font: pip_main_font
@@ -807,9 +801,12 @@ lvgl:
                             height: 30
                             bg_color: pip_line
                             indicator:
-                              bg_color: pip_bright
+                              bg_color: pip_line  # Color when OFF
+                              checked:
+                                bg_color: pip_bright  # Bright green when ON
                             knob:
                               bg_color: 0x000000
+
                             on_value:
                               - lambda: |-
                                   id(rad_sound_enabled) = x;
@@ -828,7 +825,9 @@ lvgl:
                             height: 30
                             bg_color: pip_line
                             indicator:
-                              bg_color: pip_bright
+                              bg_color: pip_line  # Color when OFF
+                              checked:
+                                bg_color: pip_bright  # Bright green when ON
                             knob:
                               bg_color: 0x000000
                             on_value:
@@ -846,7 +845,7 @@ lvgl:
                             text_color: pip_bright
                             text_font: pip_sub_font
                         - label:
-                            x: 110
+                            x: 120
                             y: 135
                             text: "VIBRATE:"
                             text_color: pip_bright
@@ -1120,7 +1119,7 @@ lvgl:
                         - label: { text: "FLOOR PLAN 3", x: 120, y: 10, text_color: pip_bright, text_font: pip_main_font }
                         - image: { src: map_img_3, x: 10, y: 50 }
                         - obj: { id: map3_rad_led, x: 280, y: 250, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
-                        - obj: { id: map3_rad2_led, x: 70, y: 85, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+                        - obj: { id: map3_rad2_led, x: 80, y: 95, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
 
                   # --- DOC A PAGE (Hidden) ---
                   - obj:
