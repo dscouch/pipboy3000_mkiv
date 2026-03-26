@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.4.0"
+  pip_version: "v2.4.2"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -429,10 +429,10 @@ script:
           lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
           
           // Set the indicator height to 0 across ALL states
-          lv_obj_set_style_height(tab_btns, 0, LV_PART_INDICATOR | LV_STATE_ANY);
+          lv_obj_set_style_height(tab_btns, 0, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_ANY);
           
           // Ensure the outline (focus ring) is dead across ALL states
-          lv_obj_set_style_outline_width(tab_btns, 0, LV_PART_ITEMS | LV_STATE_ANY);
+          lv_obj_set_style_outline_width(tab_btns, 0, (uint32_t)LV_PART_ITEMS | (uint32_t)LV_STATE_ANY);
 
           // Generate the initial text map with the brackets
           static char init_labels[16][8];
@@ -469,8 +469,8 @@ script:
           // ---> FORCE THE TAB UNDERLINE COLOR <---
           // (YAML doesn't support LV_PART_INDICATOR on tabviews yet)
           lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
-          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), LV_PART_INDICATOR | LV_STATE_CHECKED);
-          lv_obj_set_style_height(tab_btns, 2, LV_PART_INDICATOR | LV_STATE_CHECKED);
+          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
+          lv_obj_set_style_height(tab_btns, 2, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
 
           // Generate the initial text map with the brackets
           static char init_labels[16][8];
@@ -797,8 +797,8 @@ lvgl:
                       id: stat_special_page
                       x: 160
                       y: 10
-                      width: 420
-                      height: 340
+                      width: 460
+                      height: 440
                       bg_color: 0x000000
                       border_width: 0
                       hidden: true 
@@ -820,8 +820,8 @@ lvgl:
                       id: stat_perks_page
                       x: 160
                       y: 10
-                      width: 420
-                      height: 300
+                      width: 460
+                      height: 440
                       bg_color: 0x000000
                       border_width: 0
                       hidden: true 
@@ -837,15 +837,15 @@ lvgl:
                         - label:
                             text: "GEIGER COUNTER"
                             x: 100
-                            y: 350
+                            y: 215
                                   
                         # --- AUDIO TOGGLE ---
                         - switch:
                             id: switch_rad_sound
                             x: 250
-                            y: 400
-                            width: 60
-                            height: 30
+                            y: 260
+                            width: 50
+                            height: 25
 
                             on_value:
                               - lambda: |-
@@ -860,9 +860,9 @@ lvgl:
                         - switch:
                             id: switch_rad_haptic
                             x: 250
-                            y: 450
-                            width: 60
-                            height: 30
+                            y: 300
+                            width: 50
+                            height: 25
 
                             on_value:
                               - lambda: |-
@@ -874,12 +874,12 @@ lvgl:
                                   }
                         - label:
                             x: 150
-                            y: 400
+                            y: 260
                             text: "SOUND:"
                             text_font: pip_sub_font
                         - label:
                             x: 120
-                            y: 450
+                            y: 300
                             text: "VIBRATE:"
                             text_font: pip_sub_font
               # --- TAB 2: INV ---
@@ -888,6 +888,7 @@ lvgl:
                 widgets:
                   - label:
                       text: "SCAN TAGS TO ACQUIRE ASSETS"
+                      text_font: pip_sub_font
                       x: 100
                       y: 10
                   
