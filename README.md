@@ -17,10 +17,10 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 * **PN532** GND=GND, SDA=GPIO19, SCL=GPIO20 on the left and VCC connects to the top of that header
 * 
 ## ID's to track ##
-Alpha UID: 04-63-EB-5B-C2-2A-81
-Beta UID: 04-21-75-94-D2-2A-81
-Charlie UID: 04-FA-F4-94-D2-2A-81
-Delta UID: 04-A9-75-5B-C2-2A-81
+* **Alpha UID:** 04-63-EB-5B-C2-2A-81
+* **Beta UID:** 04-21-75-94-D2-2A-81
+* **Charlie UID:** 04-FA-F4-94-D2-2A-81
+* **Delta UID:** 04-A9-75-5B-C2-2A-81
 
 
 ## Software & Infrastructure
