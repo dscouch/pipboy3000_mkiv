@@ -21,6 +21,8 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 * **Beta UID:** 04-21-75-94-D2-2A-81
 * **Charlie UID:** 04-FA-F4-94-D2-2A-81
 * **Delta UID:** 04-A9-75-5B-C2-2A-81
+* **1:**  UID: 04-E5-7B-5B-C2-2A-81
+* **2:**  UID: 04-54-55-5B-C2-2A-81
 
 
 ## Software & Infrastructure
