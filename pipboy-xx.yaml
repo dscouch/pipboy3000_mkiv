@@ -2,6 +2,1762 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
+  pip_version: "v2.4.8"
+  dweller_id: "793"    # 793 or 612
+  other_id: "612"
+  device_name: "pipboy-${dweller_id}"
+  friendly_name: "Vault Dweller ${dweller_id}"
+  
+  # Hex Puzzle Arrays
+  data_793_grid: &grid793 '{0x0, 0xD, 0x2, 0x1, 0xC, 0x9, 0x4, 0xA, 0x7, 0x8, 0x6, 0x5, 0xB, 0x3, 0xE, 0x0}'
+  data_612_grid: &grid612 '{0x0, 0x4, 0xF, 0xE, 0x5, 0x9, 0xD, 0x2, 0xA, 0x6, 0x1, 0x0, 0xB, 0xC, 0x7, 0x8}'
+  cell_793_lock: &lock793 '{true, false, false, false, false, true, false, false, false, false, true, false, false, false, false, true}'
+  cell_612_lock: &lock612 '{true, false, false, false, false, false, false, true, false, true, false, false, false, false, true, false}'
+  
+  # ACTIVE DWELLER SELECTOR
+  active_grid: *grid793 
+  active_lock: *lock793
+
+  # DWELLER PIP BOY SERIAL NUMS
+  # Dweller 793: E793X4
+  # Dweller 612: D612Z5
+
+
+# =========================================
+# ESPHOME 
+# =========================================
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  min_version: 2026.2.4
+  name_add_mac_suffix: false
+  on_boot:
+    priority: 800
+    then:
+      - output.turn_on: backlight_pin
+      - script.execute: robco_boot_sequence
+      - lambda: |-
+          id(boot_start_time) = millis(); 
+          ESP_LOGI("ROBCO", "=============================================");
+          ESP_LOGI("ROBCO", " PIP-OS(R) V7.1.0.8 - COPYRIGHT ROBCO IND.");
+          ESP_LOGI("ROBCO", " COMPILED FIRMWARE VERSION: %s", "${pip_version}");
+          ESP_LOGI("ROBCO", "=============================================");
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  # This is the ONE and ONLY place this command is allowed to exist
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
+      CONFIG_ESP32S3_DATA_CACHE_64KB: y
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
+      CONFIG_SPIRAM_RODATA: y
+     
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  level: DEBUG
+  hardware_uart: USB_SERIAL_JTAG
+# =========================================
+# HOME ASSISTANT CONNECTION
+# =========================================
+# (Ensure your secrets.yaml has these defined!)
+api:
+  encryption:
+    key: !secret pipboy_api_key 
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: .home 
+
+ota:
+  - platform: esphome
+
+debug: 
+  update_interval: 5s
+
+# =========================================
+# OVERSEER CONTROLS (Home Assistant)
+# =========================================
+number:
+  - platform: template
+    name: "Scanner Sensitivity Offset"
+    id: ha_scanner_fudge
+    icon: "mdi:radioactive"
+    min_value: -100
+    max_value: 100
+    step: 5
+    initial_value: 0
+    optimistic: true
+    on_value:
+      - lambda: |-
+          // When the Overseer adjusts the slider in Home Assistant, 
+          // instantly format and transmit the command to the C3 Coprocessor!
+          char buffer[20];
+          sprintf(buffer, "FUDGE:%d\n", (int)x);
+          id(coproc_uart).write_str(buffer);
+          ESP_LOGI("OVERSEER", "Remote calibration override broadcasted: %d", (int)x);
+
+  - platform: template
+    name: "Pip-Boy XP Override"
+    id: ha_xp_control
+    icon: "mdi:star-shooting"
+    min_value: 0
+    max_value: 9999
+    step: 1
+    # Read the state from the global variable
+    lambda: 'return id(vault_xp);'
+    update_interval: 2s
+    # Handle changes sent from Home Assistant
+    set_action:
+      - lambda: |-
+          id(vault_xp) = x;
+          lv_label_set_text_fmt(id(ui_xp_label), "%d", id(vault_xp));
+          
+          // Confirm the new state to Home Assistant
+          id(ha_xp_control).publish_state(x);
+
+# =========================================
+# RPG & PUZZLE STATE (GLOBALS)
+# =========================================
+globals:
+  # Memory Core Puzzle
+  - id: hex_grid
+    type: int[16]
+    initial_value: ${active_grid}
+  - id: locked_cells
+    type: bool[16] 
+    initial_value: ${active_lock}
+  - id: target_sum
+    type: int
+    initial_value: '30' 
+  - id: data_solved
+    type: bool
+    initial_value: 'false'
+    restore_value: no
+  - id: input_direction
+    type: int
+    restore_value: no
+    initial_value: '1' # 1 for forward (+), -1 for backward (-)
+    
+  # RPG Stats
+  - id: vault_xp
+    type: int
+    initial_value: '0'
+    restore_value: yes 
+  - id: vault_hp
+    type: int
+    initial_value: '100'
+    restore_value: yes 
+    
+  # Reactor Meltdown Status
+  - id: meltdown_hold_time
+    type: int
+    initial_value: '0'
+    restore_value: no
+
+  - id: show_boot_screen
+    type: bool
+    initial_value: 'false'
+  - id: boot_start_time
+    type: uint32_t
+    initial_value: '0'
+  - id: boot_step
+    type: int
+    initial_value: '0'
+  - id: boot_buffer
+    type: std::string
+    initial_value: '""'
+# Geiger Counter Settings
+  - id: rad_sound_enabled
+    type: bool
+    initial_value: 'false' # Starts FALSE on boot!
+  - id: rad_haptic_enabled
+    type: bool
+    initial_value: 'false' # Starts FALSE on boot!
+  - id: scanner_fudge
+    type: int
+    initial_value: '0'
+
+# Radiation Smoothing
+  - id: consecutive_high_rads
+    type: int
+    initial_value: '0'
+    restore_value: no
+  - id: is_exposed
+    type: bool
+    initial_value: 'false'
+    restore_value: no
+
+# Inventory State (Index 0 to 3 for the 4 items)
+  - id: inv_found
+    type: bool[4]
+    initial_value: '{false, false, false, false}'
+    restore_value: yes 
+  - id: inv_solved
+    type: bool[4]
+    initial_value: '{false, false, false, false}'
+    restore_value: yes 
+    
+  # Tracks which item puzzle the user is currently looking at
+  - id: active_inv_puzzle
+    type: int
+    initial_value: '0'
+    restore_value: no
+
+  # Puzzle Mechanics
+  - id: puzzle_is_open
+    type: bool
+    initial_value: 'false'
+    restore_value: no
+  - id: active_puzzle_timer
+    type: int
+    initial_value: '10'
+    restore_value: no
+  - id: active_puzzle_id
+    type: int
+    initial_value: '-1'
+    restore_value: no
+
+
+# =========================================
+# HARDWARE & BUSES
+# =========================================
+output:
+  - platform: gpio
+    pin: GPIO2
+    id: backlight_pin
+    inverted: true
+
+i2c:
+  - sda: GPIO19
+    scl: GPIO20
+    scan: true
+    id: bus_a
+
+# The Coprocessor UART Bus ====================================================
+uart:
+  id: coproc_uart
+  tx_pin: GPIO43
+  rx_pin: GPIO44  
+  baud_rate: 9600
+
+# =========================================
+# NFC READER (I2C)
+# =========================================
+pn532_i2c:
+  id: nfc_reader
+  i2c_id: bus_a
+  address: 0x24  
+  update_interval: 1s
+  on_tag:
+    then:
+      - lambda: |-
+          // Capture the scanned ID as a string
+          std::string uid = x;
+          ESP_LOGD("NFC", "Tag Scanned: %s", uid.c_str());
+
+          // --- CACHE ALPHA ---
+          if (uid == "04-63-EB-5B-C2-2A-81") { 
+            if (!id(inv_solved)[0]) {
+              
+              if (id(puzzle_is_open) && id(active_puzzle_id) == 0) {
+                // Condition 1: Puzzle is already open. Reset the timer!
+                id(active_puzzle_timer) = 10;
+                ESP_LOGI("ROBCO", "Timer reset for Cache Alpha.");
+                
+              } else if (id(is_exposed)) {
+                // Condition 2: Player is exposed to radiation. Open the puzzle!
+                id(active_puzzle_id) = 0;
+                id(active_puzzle_timer) = 10;
+                id(puzzle_is_open) = true;
+                id(current_puzzle_seed) = esp_random() % 4; 
+                
+                // --- PREPARE CACHE ALPHA ---
+                if (scanned_id == 0) {
+                  // Show the Alpha puzzle container
+                  lv_obj_clear_flag(id(puzzle_alpha_container), LV_OBJ_FLAG_HIDDEN);
+                  
+                  // Reset all switches to OFF
+                  lv_obj_clear_state(id(sw_alpha_1), LV_STATE_CHECKED);
+                  lv_obj_clear_state(id(sw_alpha_2), LV_STATE_CHECKED);
+                  lv_obj_clear_state(id(sw_alpha_3), LV_STATE_CHECKED);
+                  lv_obj_clear_state(id(sw_alpha_4), LV_STATE_CHECKED);
+                  
+                  // Set the port text based on the random seed
+                  if (id(current_puzzle_seed) == 0) lv_label_set_text(id(alpha_hint_label), "PORT: 0x1A");
+                  else if (id(current_puzzle_seed) == 1) lv_label_set_text(id(alpha_hint_label), "PORT: 0x2B");
+                  else if (id(current_puzzle_seed) == 2) lv_label_set_text(id(alpha_hint_label), "PORT: 0x3C");
+                  else if (id(current_puzzle_seed) == 3) lv_label_set_text(id(alpha_hint_label), "PORT: 0x4D");
+                }
+              
+              lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                
+                lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                ESP_LOGI("ROBCO", "Puzzle Alpha opened.");
+              }
+            }
+          }
+          // --- CACHE BETA ---
+          else if (uid == "04-21-75-94-D2-2A-81" && !id(inv_found)[1]) {
+            if (!id(inv_solved)[1]) {
+              
+              if (id(puzzle_is_open) && id(active_puzzle_id) == 1) {
+                // Condition 1: Puzzle is already open. Reset the timer!
+                id(active_puzzle_timer) = 10;
+                ESP_LOGI("ROBCO", "Timer reset for Cache Beta.");
+                
+              } else if (id(is_exposed)) {
+                // Condition 2: Player is exposed to radiation. Open the puzzle!
+                id(active_puzzle_id) = 1;
+                id(active_puzzle_timer) = 10;
+                id(puzzle_is_open) = true;
+                
+                // (We will add the code here to randomize the puzzle parameters later)
+                
+                lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                ESP_LOGI("ROBCO", "Puzzle Beta opened.");
+              }
+            }
+          }
+          // --- CACHE CHARLIE ---
+          else if (uid == "04-FA-F4-94-D2-2A-81" && !id(inv_found)[2]) {
+            if (!id(inv_solved)[2]) {
+              
+              if (id(puzzle_is_open) && id(active_puzzle_id) == 2) {
+                // Condition 1: Puzzle is already open. Reset the timer!
+                id(active_puzzle_timer) = 10;
+                ESP_LOGI("ROBCO", "Timer reset for Cache Charlie.");
+                
+              } else if (id(is_exposed)) {
+                // Condition 2: Player is exposed to radiation. Open the puzzle!
+                id(active_puzzle_id) = 2;
+                id(active_puzzle_timer) = 10;
+                id(puzzle_is_open) = true;
+                
+                // (We will add the code here to randomize the puzzle parameters later)
+                
+                lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                ESP_LOGI("ROBCO", "Puzzle Charlie opened.");
+              }
+            }
+          }
+          // --- CACHE DELTA ---
+          else if (uid == "04-A9-75-5B-C2-2A-81" && !id(inv_found)[3]) {
+            if (!id(inv_solved)[3]) {
+              
+              if (id(puzzle_is_open) && id(active_puzzle_id) == 3) {
+                // Condition 1: Puzzle is already open. Reset the timer!
+                id(active_puzzle_timer) = 10;
+                ESP_LOGI("ROBCO", "Timer reset for Cache Delta.");
+                
+              } else if (id(is_exposed)) {
+                // Condition 2: Player is exposed to radiation. Open the puzzle!
+                id(active_puzzle_id) = 3;
+                id(active_puzzle_timer) = 10;
+                id(puzzle_is_open) = true;
+                
+                // (We will add the code here to randomize the puzzle parameters later)
+                
+                lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                ESP_LOGI("ROBCO", "Puzzle Delta opened.");
+              }
+            }
+          }
+
+# --- THE DISPLAY HARDWARE ---
+# Notice there is no lambda here anymore! LVGL takes control.
+# Size of visible display is 600x480 starting at x=200
+display:
+  - platform: rpi_dpi_rgb
+    id: my_display
+    dimensions:
+      width: 800
+      height: 480
+    pclk_frequency: 15MHz
+    hsync_pulse_width: 1
+    hsync_back_porch: 42
+    hsync_front_porch: 20
+    vsync_pulse_width: 10
+    vsync_back_porch: 12
+    vsync_front_porch: 4
+    pclk_inverted: true
+    color_order: rgb
+    de_pin: GPIO40
+    hsync_pin: GPIO39
+    vsync_pin: GPIO41
+    pclk_pin: GPIO42
+    data_pins:
+      blue: [GPIO8, GPIO3, GPIO46, GPIO9, GPIO1]
+      green: [GPIO5, GPIO6, GPIO7, GPIO15, GPIO16, GPIO4]
+      red: [GPIO45, GPIO48, GPIO47, GPIO21, GPIO14]
+
+touchscreen:
+  - platform: gt911
+    display: my_display
+    id: my_touch
+    # Explicitly lock in the address we found in your log
+    address: 0x5D 
+    # Keep the reset pin so it boots cleanly
+    reset_pin: GPIO38 
+    
+    # Notice: interrupt_pin is COMPLETELY GONE. 
+    # This forces Polling Mode!
+    
+    on_touch:
+      - lambda: |-
+          ESP_LOGI("TOUCH_DEBUG", "RAW TAP: X: %d | Y: %d", touch.x, touch.y);
+
+
+
+# =========================================
+# GLOBAL COLORS
+# =========================================
+color:
+  - id: pip_bright
+    red: 0%
+    green: 100%
+    blue: 0%
+  - id: pip_unselected
+    red: 0%
+    green: 60%
+    blue: 0%
+  - id: pip_line 
+    red: 0%
+    green: 20%
+    blue: 0%
+  - id: pip_alert
+    red: 100%
+    green: 0%
+    blue: 0%
+
+# =========================================
+# GLOBAL FONTS
+# =========================================
+font:
+  - file: "monofonto.otf"
+    id: pip_main_font
+    size: 36
+    glyphs: 
+      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+  - file: "monofonto.otf"
+    id: pip_sub_font
+    size: 27
+    glyphs:
+      - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+      - 'Σ'
+
+# =========================================
+# IMAGES & ANIMATIONS
+# =========================================
+image:
+  # Vault boy boot image
+  - file: "images/vaultboy_thumbsup.jpg"
+    id: img_vaultboy_thumbsup
+    type: rgb565
+  # Vault boy boot agility
+  - file: "images/agility.jpg"
+    id: img_agility
+    type: rgb565
+  # Vault boy boot perks
+  - file: "images/perks.jpg"
+    id: img_perks
+    type: rgb565
+  # Pip boy logo inv
+  - file: "images/pipboylogo.jpg"
+    id: img_pipboy
+    type: rgb565
+  # Vault boy walking animation
+  - file: "images/vb00.png"
+    type: rgb565
+    id: vb00
+  - file: "images/vb01.png"
+    type: rgb565
+    id: vb01
+  - file: "images/vb02.png"
+    type: rgb565
+    id: vb02
+  - file: "images/vb03.png"
+    type: rgb565
+    id: vb03
+  - file: "images/vb04.png"
+    type: rgb565
+    id: vb04
+  - file: "images/vb05.png"
+    type: rgb565
+    id: vb05
+  - file: "images/vb06.png"
+    type: rgb565
+    id: vb06
+  - file: "images/vb07.png"
+    type: rgb565
+    id: vb07
+  - file: "images/vb08.png"
+    type: rgb565
+    id: vb08
+  - file: "images/vb09.png"
+    type: rgb565
+    id: vb09
+  - file: "images/vb10.png"
+    type: rgb565
+    id: vb10
+  - file: "images/vb11.png"
+    type: rgb565
+    id: vb11
+  - file: "images/vb12.png"
+    type: rgb565
+    id: vb12
+  - file: "images/vb13.png"
+    id: vb13
+    type: rgb565
+  - file: "images/vb14.png"
+    id: vb14
+    type: rgb565
+  - file: "images/vb15.png"
+    id: vb15
+    type: rgb565
+# --- MAP IMAGES ---
+  - file: "images/map1.jpg"
+    id: map_img_1
+    type: rgb565
+  - file: "images/map2.jpg"
+    id: map_img_2
+    type: rgb565
+  - file: "images/map3.jpg"
+    id: map_img_3
+    type: rgb565
+
+# =========================================
+# SYSTEM SCRIPTS
+# =========================================
+script:
+  - id: robco_boot_sequence
+    then:
+      # 1. Show the blank boot screen
+      - lvgl.page.show: boot_screen
+      - delay: 500ms
+      
+      # 2. Loop through the array of text
+      - while:
+          condition:
+            lambda: |-
+              return id(boot_step) < 13; 
+          then:
+            # Grab the next line and add it to our text buffer
+            - lambda: |-
+                std::vector<std::string> lines = {
+                  "****** PIP-OS(R) ${pip_version} *******\n",
+                  "COPYRIGHT 2075 ROBCO(R)\n",
+                  "LOADER V1.1\n",
+                  "EXEC VERSION 41.10\n",
+                  "64K RAM SYSTEM\n",
+                  "38911 BYTES FREE\n",
+                  "NO HOLOTAPE FOUND\n",
+                  "Pip-Boy 3000 Mark IV\n",
+                  "\n",
+                  "Initializing Biometrics...\n",
+                  " --- Please stop struggling ---\n",
+                  "Subject: Dweller: ${dweller_id}\n",
+                  "Biometrics Initialized.",
+                  "Calibrating geiger counter... OK\n"
+                };
+                id(boot_buffer) += lines[id(boot_step)];
+                id(boot_step)++; 
+                
+            # Push the updated buffer to the LVGL label
+            - lvgl.label.update:
+                id: ui_boot_text
+                text: !lambda "return id(boot_buffer).c_str();"
+                
+            # The speed at which new lines appear
+            - delay: 20ms #2s to be annoying
+            
+      # 3. Hold for dramatic effect when finished
+      - delay: 2s  #5s to be annoying
+      
+      # --- NEW: SWAP TO THE THUMBS UP IMAGE ---
+      - lambda: |-
+          // Hide the text block
+          lv_obj_add_flag(id(ui_boot_text), LV_OBJ_FLAG_HIDDEN);
+          
+          // Unhide the thumbs up image
+          lv_obj_clear_flag(id(ui_boot_image), LV_OBJ_FLAG_HIDDEN);
+          
+      # Hold the image on screen for a few seconds before loading the UI
+      - delay: 5s
+
+      # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
+      - lambda: |-
+          // ---> ANNIHILATE THE BLUE INDICATOR LINE & FOCUS RINGS <---
+          lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
+          
+          // Set the indicator height to 0 across ALL states
+          lv_obj_set_style_height(tab_btns, 0, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_ANY);
+          
+          // Ensure the outline (focus ring) is dead across ALL states
+          lv_obj_set_style_outline_width(tab_btns, 0, (uint32_t)LV_PART_ITEMS | (uint32_t)LV_STATE_ANY);
+
+          // Generate the initial text map with the brackets
+          static char init_labels[16][8];
+          static const char *init_map[21]; 
+          int p = 0;
+          for (int i = 0; i < 16; i++) {
+            if (id(locked_cells)[i]) {
+              sprintf(init_labels[i], "[%02X]", id(hex_grid)[i]);
+            } else if (i == 0) {
+              sprintf(init_labels[i], "*%02X*", id(hex_grid)[i]);
+            } else {
+              sprintf(init_labels[i], " %02X ", id(hex_grid)[i]);
+            }
+            init_map[p++] = init_labels[i];
+            if ((i + 1) % 4 == 0 && i != 15) init_map[p++] = "\n";
+          }
+          init_map[p] = ""; 
+          lv_btnmatrix_set_map(id(memory_core_grid).obj, init_map);
+
+          // Inject Dynamic Doc Labels into Map Menu
+          static const char * doc_1_str = (std::string("${dweller_id}") == "793") ? "DOC 1" : "DOC 3";
+          static const char * doc_2_str = (std::string("${dweller_id}") == "793") ? "DOC 2" : "DOC 4";
+          static const char * map_labels[] = {"MAP 1", "\n", "MAP 2", "\n", "MAP 3", "\n", doc_1_str, "\n", doc_2_str, ""};
+          lv_btnmatrix_set_map(id(map_side_menu).obj, map_labels);
+
+          // Enable the Geiger Counter settings & flip the UI switches!
+          id(rad_sound_enabled) = true;
+          id(rad_haptic_enabled) = true;
+          lv_obj_add_state(id(switch_rad_sound), LV_STATE_CHECKED);
+          lv_obj_add_state(id(switch_rad_haptic), LV_STATE_CHECKED);
+
+      # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
+      - lambda: |-
+          // ---> FORCE THE TAB UNDERLINE COLOR <---
+          // (YAML doesn't support LV_PART_INDICATOR on tabviews yet)
+          lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
+          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
+          lv_obj_set_style_height(tab_btns, 2, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
+
+          // Generate the initial text map with the brackets
+          static char init_labels[16][8];
+
+      # ---> START THE VAULT BOY ANIMATION! <---
+      - lvgl.animimg.start: vault_boy_anim
+
+      # 5. Launch the UI!
+      - lvgl.page.show: main_interface
+
+      # 6. Animate the Rad Meter Needle (Calibration Test)
+      - lambda: |-
+          lv_anim_t a;
+          lv_anim_init(&a);
+          
+          // Target the red needle
+          lv_anim_set_var(&a, id(rad_needle));
+          
+          // Move from 0 to the maximum value of 50
+          lv_anim_set_values(&a, 0, 50);
+          
+          // Set the time for the upward movement (800 milliseconds)
+          lv_anim_set_time(&a, 800); 
+          
+          // Set the time for the downward movement (800 milliseconds)
+          lv_anim_set_playback_time(&a, 800); 
+          
+          // Add a brief pause at the top before it falls back down
+          lv_anim_set_playback_delay(&a, 200); 
+          
+          // Use a smooth movement curve
+          lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out); 
+          
+          // Tell the animation how to update the needle position
+          lv_anim_set_exec_cb(&a, [](void * var, int32_t v) {
+              lv_meter_set_indicator_value(id(rad_meter), (lv_meter_indicator_t *)var, v);
+          });
+          
+          // Start the animation
+          lv_anim_start(&a);
+
+  # =========================================
+  # REWARDS AND GAMEPLAY SCRIPTS
+  # =========================================
+  - id: add_xp
+    parameters:
+      amount: int
+    then:
+      - lambda: |-
+          id(vault_xp) += amount;
+          lv_label_set_text_fmt(id(ui_xp_label), "%d", id(vault_xp));
+          
+          // Notify Home Assistant about the new total
+          id(ha_xp_control).publish_state(id(vault_xp));
+          
+          ESP_LOGI("ROBCO", "XP Added: %d. Total XP: %d", amount, id(vault_xp));
+
+  - id: puzzle_failed_penalty
+    then:
+      - lambda: |-
+          // Deduct 25 HP, but do not drop below 0
+          id(vault_hp) -= 25;
+          if (id(vault_hp) < 0) id(vault_hp) = 0; 
+          
+          // Update the screen and Home Assistant
+          lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
+          id(telemetry_hp).publish_state(id(vault_hp));
+          
+          // Close the puzzle
+          id(puzzle_is_open) = false;
+          lv_obj_add_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+          
+          ESP_LOGW("ROBCO", "Puzzle failed. 25 HP deducted.");
+
+# =========================================
+# SENSORS (Abridged to essentials for compilation)
+# =========================================
+sensor:
+  - platform: template
+    name: "Pip-Boy HP"
+    id: telemetry_hp
+    lambda: 'return id(vault_hp);'
+    update_interval: 2s
+  - platform: template
+    name: "Pip-Boy Radiation Level"
+    id: current_rads
+    unit_of_measurement: "RAD"
+
+  # =========================================
+  # SYSTEM DIAGNOSTICS
+  # =========================================
+  - platform: template
+    name: "Pip-Boy Free Internal Heap"
+    id: diag_free_heap
+    unit_of_measurement: "B"
+    icon: "mdi:memory"
+    update_interval: 10s
+    accuracy_decimals: 0
+    lambda: |-
+      return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
+  - platform: template
+    name: "Pip-Boy Largest Free Block"
+    id: diag_largest_block
+    unit_of_measurement: "B"
+    icon: "mdi:memory"
+    update_interval: 10s
+    accuracy_decimals: 0
+    lambda: |-
+      return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
+  - platform: template
+    name: "Pip-Boy Heap Fragmentation"
+    id: diag_heap_frag
+    unit_of_measurement: "%"
+    icon: "mdi:puzzle-outline"
+    update_interval: 10s
+    accuracy_decimals: 1
+    lambda: |-
+      float free_heap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      float largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      
+      if (free_heap > 0) {
+        return 100.0 - ((largest_block / free_heap) * 100.0);
+      }
+      return 0.0;
+
+interval:
+  # ---------------------------------------------------------
+  # COPROCESSOR LISTENER (Runs every 100ms)
+  # ---------------------------------------------------------
+  - interval: 100ms
+    then:
+      - lambda: |-
+          static std::string line = "";
+          
+          while (id(coproc_uart).available()) {
+            uint8_t c;
+            id(coproc_uart).read_byte(&c);
+            
+            if (c == '\n') {
+              // We received a full line! Check if it's a RAD reading.
+
+              if (line.rfind("RAD:", 0) == 0) { 
+                // Extract the number (everything after "RAD:")
+                int rads = atoi(line.substr(4).c_str());
+                
+                // --- NEW: Radiation Smoothing Logic ---
+                if (rads > 25) {
+                  id(consecutive_high_rads) += 1;
+                  if (id(consecutive_high_rads) >= 3) {
+                    id(is_exposed) = true;
+                  }
+                } else {
+                  // Reset immediately if rads drop to 25 or below
+                  id(consecutive_high_rads) = 0;
+                  id(is_exposed) = false;
+                }
+
+                // 1. Update the graphical needle
+                lv_meter_set_indicator_value(id(rad_meter), id(rad_needle), rads);
+                
+                // 2. Update the text label
+                lv_label_set_text_fmt(id(rad_label), "%d", rads);
+
+                // 3. ---> NEW: Send the value to Home Assistant <---
+                id(current_rads).publish_state(rads);
+              }
+              // Clear the buffer for the next message
+              line = "";
+            } else {
+              // Keep adding characters until we hit the newline
+              line += (char)c;
+            }
+          }
+# --- HP DRAIN (Every 3 seconds) ---
+  - interval: 3s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(is_exposed) && id(vault_hp) > 0;'
+          then:
+            - lambda: |-
+                id(vault_hp) -= 1;
+                lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
+                id(telemetry_hp).publish_state(id(vault_hp)); 
+
+  # --- HP RECOVERY (Every 10 seconds) ---
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(is_exposed) && id(vault_hp) < 100;'
+          then:
+            - lambda: |-
+                id(vault_hp) += 1;
+                lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
+                id(telemetry_hp).publish_state(id(vault_hp));
+
+  # --- PUZZLE TIMER (Every 1 second) ---
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(puzzle_is_open);'
+          then:
+            - lambda: |-
+                // Check fail conditions: Time runs out OR radiation is lost
+                if (id(active_puzzle_timer) <= 0 || !id(is_exposed)) {
+                  id(puzzle_is_open) = false;
+                  
+                  // Hide the puzzle overlay
+                  lv_obj_add_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                  
+                  ESP_LOGI("ROBCO", "Puzzle aborted. Time expired or radiation lost.");
+                } else {
+                  // Decrease the timer
+                  id(active_puzzle_timer) -= 1;
+                  
+                  // Update the timer label on the screen (we will build this label next)
+                  lv_label_set_text_fmt(id(lbl_puzzle_timer), "00:%02d", id(active_puzzle_timer));
+                }
+
+# =========================================
+# DISPLAY CONFIGURATION
+# =========================================
+
+lvgl:
+  displays:
+    - my_display
+  touchscreens:
+    - my_touch
+  bg_color: 0x000000
+
+  # =========================================
+  # GLOBAL LVGL STYLES & THEMES
+  # =========================================
+  theme:
+    label:
+      text_font: pip_main_font
+      text_color: pip_bright
+    button:
+      bg_color: 0x000000
+      shadow_width: 0
+      border_color: pip_unselected
+      border_width: 1
+      text_font: pip_sub_font
+      text_color: pip_unselected
+      pressed: # set some button colors to be different in pressed state
+        bg_color: 0x006600
+        text_color: pip_bright
+      checked: # set some button colors to be different in checked state
+        bg_color: 0x006600
+        text_color: pip_bright
+    buttonmatrix:
+      bg_color: 0x000000
+      border_width: 0
+      items:
+        bg_color: 0x000000
+        text_color: 0x009900  
+        text_font: pip_main_font
+        border_color: 0x003300
+        border_width: 2
+        shadow_width: 0
+        # State modifiers go HERE, where the style is applied!
+        checked:
+          bg_color: 0x003300
+          text_color: pip_bright
+    switch:
+      bg_color: pip_line
+      indicator:
+        bg_color: pip_line
+        checked:
+          bg_color: pip_bright
+      knob:
+        bg_color: 0x000000
+
+  pages:
+    # ==========================================
+    # PAGE 0: THE ROBCO BOOT SEQUENCE
+    # ==========================================
+
+    - id: boot_screen
+      bg_color: 0x000000
+      widgets:
+        - label:
+            id: ui_boot_text
+            text: ""   # Starts completely blank
+            x: 220      # Gives it a nice command-line margin
+            y: 20
+            width: 560 # Keeps it from wrapping off-screen
+            text_font: pip_sub_font
+        
+        # --- NEW: BOOT LOGO ---
+        - image:
+            id: ui_boot_image
+            src: img_vaultboy_thumbsup
+            x: 220      # Gives it a nice command-line margin
+            y: 20
+            hidden: true  # Hide it while the text is typing
+
+    # ==========================================
+    # PAGE 1: THE MAIN PIP-BOY INTERFACE
+    # ==========================================
+    - id: main_interface
+      bg_color: 0x000000
+      widgets:
+        
+        # --- THE PERSISTENT FOOTER ---
+        - label:
+            text: "HP:"
+            x: 240
+            y: 445
+        - label:
+            id: ui_hp_label  # <-- NEW ID
+            text: "100"
+            x: 290
+            y: 445
+            
+        - label:
+            text: ${pip_version}
+            x: 425 
+            y: 450
+            text_color: pip_unselected
+            text_font: pip_sub_font
+            
+        - label:
+            text: "XP:"
+            x: 672
+            y: 445
+        - label:
+            id: ui_xp_label  # <-- NEW ID
+            text: "0"
+            x: 722
+            y: 445
+
+# --- THE MAIN TABVIEW -----------
+        - tabview:
+            id: main_tabs
+            x: 200
+            y: 0
+            width: 600
+            height: 440 
+            bg_color: 0x000000
+            scrollable: false 
+            
+            tab_style:
+              bg_color: 0x000000
+              text_color: pip_unselected
+              text_font: pip_main_font
+              border_width: 0
+              items:
+                shadow_width: 0
+                outline_width: 0  
+                border_width: 0
+                checked:
+                  bg_color: 0x006600  # Dark green active background
+                  text_color: pip_bright
+                  # ---> NEW: The thin light green box! <---
+                  border_width: 1
+                  border_color: pip_bright
+                focused:
+                  outline_width: 0
+
+            tabs:
+              # --- TAB 1: STAT ---
+              - name: "STAT"
+                scrollable: false
+                widgets:
+                  # --- THE SIDE NAVIGATION MENU ---
+                  - buttonmatrix:  #600x440
+                      id: stat_side_menu
+                      x: 10
+                      y: 20
+                      width: 150
+                      height: 150
+                      one_checked: true
+                      items:
+                        text_font: pip_sub_font
+                      rows:
+                        - buttons:
+                          - text: "STATUS"
+                            control:
+                              checkable: true
+                              checked: true
+                        - buttons:
+                          - text: "SPECIAL"
+                            control:
+                              checkable: true
+                              checked: false
+                        - buttons:
+                          - text: "PERKS"
+                            control:
+                              checkable: true
+                              checked: false
+                      on_click:
+                        - lambda: |-
+                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(stat_side_menu).obj);
+                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
+                            
+                            // 1. Hide ALL sub-pages
+                            lv_obj_add_flag(id(stat_status_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(stat_special_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(stat_perks_page), LV_OBJ_FLAG_HIDDEN);
+                            
+                            // 2. Reveal the chosen page
+                            if (btn_id == 0) lv_obj_clear_flag(id(stat_status_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 1) lv_obj_clear_flag(id(stat_special_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 2) lv_obj_clear_flag(id(stat_perks_page), LV_OBJ_FLAG_HIDDEN);
+
+                  # --- PAGE 1: STATUS (Visible by default) ---
+                  - obj:
+                      id: stat_status_page
+                      x: 160
+                      y: 10
+                      width: 460
+                      height: 440
+                      bg_color: 0x000000
+                      border_width: 0
+                      scrollable: false
+                      widgets:
+                        # ==========================================
+                        # ANIMATED VAULT BOY
+                        # ==========================================
+                        - animimg:
+                            id: vault_boy_anim
+                            x: 60 
+                            y: 80
+                            # Update width/height to match your PNG's actual pixel size!
+                            width: 117 
+                            height: 200
+                            # Total time to play all 16 frames. 1600ms = 10 frames per second
+                            duration: 1600ms 
+                            src:
+                              - vb00
+                              - vb01
+                              - vb02
+                              - vb03
+                              - vb04
+                              - vb05
+                              - vb06
+                              - vb07
+                              - vb08
+                              - vb09
+                              - vb10
+                              - vb11
+                              - vb12
+                              - vb13
+                              - vb14
+                              - vb15
+
+                        # ==========================================
+                        # RAD METER (Replaces the Arc)
+                        # ==========================================
+                        - meter:
+                            id: rad_meter
+                            x: 240
+                            y: 40
+                            width: 250
+                            height: 250
+                            bg_color: 0x000000
+                            border_width: 0
+                            scales:
+                              - range_from: 0
+                                range_to: 50
+                                angle_range: 180
+                                rotation: 90  # Creates a top-half curve
+                                ticks:
+                                  count: 26    # One tick for every two units
+                                  width: 2
+                                  length: 12
+                                  color: pip_bright
+                                indicators:
+                                  # The thick background track
+                                  - arc:
+                                      color: pip_line
+                                      width: 6
+                                      start_value: 0
+                                      end_value: 50
+                                      r_mod: 0
+                                  # The red needle
+                                  - line:
+                                      id: rad_needle
+                                      color: pip_alert 
+                                      width: 4
+                                      value: 25        # Boot position
+                                      r_mod: -5        # Pulls needle tip back from the edge
+                            widgets:
+                              # Centres the text inside the meter
+                              - label:
+                                  text: "RADS"
+                                  align: CENTER
+                                  y: 30
+                                  text_font: pip_sub_font
+                              - label:
+                                  id: rad_label
+                                  text: "0"
+                                  align: CENTER
+                                  y: 60
+
+                  # --- PAGE 2: S.P.E.C.I.A.L. (Hidden by default) ---
+                  - obj:
+                      id: stat_special_page
+                      x: 160
+                      y: 10
+                      width: 460
+                      height: 440
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true 
+                      scrollable: false
+                      scrollbar_mode: "OFF"
+                      widgets:
+                        # vault boy agility
+                        - image:
+                            src: img_agility
+                            x: 10
+                            y: 10  # Shifted down to clear the title text
+                        - label:
+                            text: "STR: 5\nPER: 6\nEND: 4\nCHA: 8\nINT: 7\nAGI: 4\nLUK: 9"
+                            x: 275
+                            y: 0
+
+                  # --- PAGE 3: PERKS (Hidden by default) ---
+                  - obj:
+                      id: stat_perks_page
+                      x: 160
+                      y: 10
+                      width: 460
+                      height: 440
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true 
+                      scrollable: false
+                      scrollbar_mode: "OFF"
+                      widgets:
+                        # vault boy perks
+                        - image:
+                            src: img_perks
+                            x: 5
+                            y: 5  # Shifted down to clear the title text
+
+                        - label:
+                            text: "GEIGER COUNTER"
+                            x: 100
+                            y: 215
+                                  
+                        # --- AUDIO TOGGLE ---
+                        - switch:
+                            id: switch_rad_sound
+                            x: 250
+                            y: 260
+                            width: 50
+                            height: 25
+
+                            on_value:
+                              - lambda: |-
+                                  id(rad_sound_enabled) = x;
+                                  if (x) {
+                                    id(coproc_uart).write_str("SND:1\n");
+                                  } else {
+                                    id(coproc_uart).write_str("SND:0\n");
+                                  }
+                                  
+                        # --- HAPTIC TOGGLE ---
+                        - switch:
+                            id: switch_rad_haptic
+                            x: 250
+                            y: 300
+                            width: 50
+                            height: 25
+
+                            on_value:
+                              - lambda: |-
+                                  id(rad_haptic_enabled) = x;
+                                  if (x) {
+                                    id(coproc_uart).write_str("HAP:1\n");
+                                  } else {
+                                    id(coproc_uart).write_str("HAP:0\n");
+                                  }
+                        - label:
+                            x: 150
+                            y: 260
+                            text: "SOUND:"
+                            text_font: pip_sub_font
+                        - label:
+                            x: 120
+                            y: 300
+                            text: "VIBRATE:"
+                            text_font: pip_sub_font
+              # --- TAB 2: INV ---
+              - name: "INV"
+                scrollable: false
+                widgets:
+                  - label:
+                      text: "SCAN TAGS TO ACQUIRE ASSETS"
+                      text_font: pip_sub_font
+                      x: 100
+                      y: 10
+                  # pipboy
+                  - image:
+                      src: img_pipboy
+                      x: 200
+                      y: 40
+                  
+                  # --- INVENTORY BUTTON 1 ---
+                  - button:
+                      id: btn_inv_0
+                      x: 20
+                      y: 60
+                      width: 560
+                      height: 60
+                      hidden: true  # Invisible until scanned!
+                      widgets:
+                        - label:
+                            id: lbl_inv_0
+                            text: "[ ENCRYPTED CACHE ALPHA ]"
+                            align: CENTER
+                      on_click:     # Only open the puzzle if it hasn't been solved yet
+                        - lambda: |-   
+                            if (!id(inv_solved)[0]) {
+                              id(active_inv_puzzle) = 0;
+                              lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                            }
+
+                  # --- INVENTORY BUTTON 2 ---
+                  - button:
+                      id: btn_inv_1
+                      x: 20
+                      y: 130
+                      width: 560
+                      height: 60
+                      hidden: true
+                      widgets:
+                        - label:
+                            id: lbl_inv_1
+                            text: "[ ENCRYPTED CACHE BETA ]"
+                            align: CENTER
+                      on_click:
+                        - lambda: |-
+                            if (!id(inv_solved)[1]) {
+                              id(active_inv_puzzle) = 1;
+                              lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                            }
+                            
+                  # --- INVENTORY BUTTON 3 ---
+                  - button:
+                      id: btn_inv_2
+                      x: 20
+                      y: 130
+                      width: 560
+                      height: 60
+                      hidden: true
+                      widgets:
+                        - label:
+                            id: lbl_inv_2
+                            text: "[ ENCRYPTED CACHE CHARLIE ]"
+                            align: CENTER
+                      on_click:
+                        - lambda: |-
+                            if (!id(inv_solved)[2]) {
+                              id(active_inv_puzzle) = 2;
+                              lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                            }
+
+                  # --- INVENTORY BUTTON 4 ---
+                  - button:
+                      id: btn_inv_3
+                      x: 20
+                      y: 130
+                      width: 560
+                      height: 60
+                      hidden: true
+                      widgets:
+                        - label:
+                            id: lbl_inv_3
+                            text: "[ ENCRYPTED CACHE DELTA ]"
+                            align: CENTER
+                      on_click:
+                        - lambda: |-
+                            if (!id(inv_solved)[3]) {
+                              id(active_inv_puzzle) = 3;
+                              lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                            }
+
+# --- INVENTORY PUZZLE OVERLAY ---
+                  - obj:
+                      id: inv_puzzle_overlay
+                      x: 10
+                      y: 50
+                      width: 580
+                      height: 380
+                      bg_color: 0x000000
+                      border_width: 2
+                      border_color: pip_bright
+                      hidden: true
+                      widgets:
+                        - label:
+                            text: "DECRYPTION REQUIRED"
+                            x: 140
+                            y: 20
+                            
+                        # THE COUNTDOWN TIMER (This fixes your compiler error!)
+                        - label:
+                            id: lbl_puzzle_timer
+                            text: "00:10"
+                            x: 240
+                            y: 60
+                            text_color: pip_alert
+                            text_font: pip_main_font
+
+                        # ==========================================
+                        # CACHE ALPHA: HARDWARE BYPASS PUZZLE
+                        # ==========================================
+                        - obj:
+                            id: puzzle_alpha_container
+                            x: 10
+                            y: 100
+                            width: 560
+                            height: 260
+                            bg_color: 0x000000
+                            border_width: 0
+                            hidden: true 
+                            widgets:
+                              - label:
+                                  id: alpha_hint_label
+                                  text: "PORT: 0x00"
+                                  x: 220
+                                  y: 10
+                              
+                              # THE 4 HARDWARE SWITCHES
+                              - switch: { id: sw_alpha_1, x: 80, y: 70, width: 60, height: 30 }
+                              - switch: { id: sw_alpha_2, x: 200, y: 70, width: 60, height: 30 }
+                              - switch: { id: sw_alpha_3, x: 320, y: 70, width: 60, height: 30 }
+                              - switch: { id: sw_alpha_4, x: 440, y: 70, width: 60, height: 30 }
+                              
+                              # NUMBER LABELS FOR THE SWITCHES
+                              - label: { text: "1", x: 100, y: 110, text_font: pip_sub_font }
+                              - label: { text: "2", x: 220, y: 110, text_font: pip_sub_font }
+                              - label: { text: "3", x: 340, y: 110, text_font: pip_sub_font }
+                              - label: { text: "4", x: 460, y: 110, text_font: pip_sub_font }
+
+                              # THE SUBMIT BUTTON
+                              - button:
+                                  id: btn_alpha_decrypt
+                                  x: 200
+                                  y: 170
+                                  width: 160
+                                  height: 60
+                                  widgets:
+                                    - label: { text: "DECRYPT", align: CENTER }
+                                    on_click:
+                                    - lambda: |-
+                                        // Read the current state of all 4 switches
+                                        bool s1 = lv_obj_has_state(id(sw_alpha_1), LV_STATE_CHECKED);
+                                        bool s2 = lv_obj_has_state(id(sw_alpha_2), LV_STATE_CHECKED);
+                                        bool s3 = lv_obj_has_state(id(sw_alpha_3), LV_STATE_CHECKED);
+                                        bool s4 = lv_obj_has_state(id(sw_alpha_4), LV_STATE_CHECKED);
+                                        
+                                        bool is_correct = false;
+                                        int seed = id(current_puzzle_seed);
+                                        
+                                        // THE RULES (The other player needs these in their manual!)
+                                        // Seed 0 (0x1A): Switches 1 and 4 must be ON.
+                                        if (seed == 0 && s1 && !s2 && !s3 && s4) is_correct = true;
+                                        
+                                        // Seed 1 (0x2B): Switches 2 and 3 must be ON.
+                                        else if (seed == 1 && !s1 && s2 && s3 && !s4) is_correct = true;
+                                        
+                                        // Seed 2 (0x3C): Switches 1, 2, and 3 must be ON.
+                                        else if (seed == 2 && s1 && s2 && s3 && !s4) is_correct = true;
+                                        
+                                        // Seed 3 (0x4D): Only Switch 4 must be ON.
+                                        else if (seed == 3 && !s1 && !s2 && !s3 && s4) is_correct = true;
+
+                                        if (is_correct) {
+                                          ESP_LOGI("ROBCO", "Cache Alpha Decrypted!");
+                                          id(inv_solved)[0] = true;
+                                          id(puzzle_is_open) = false;
+                                          
+                                          // Update the inventory screen button
+                                          lv_label_set_text(id(lbl_inv_0), "DEC: 7A 9F 22 B1");
+                                          
+                                          // Hide the overlay and puzzle
+                                          lv_obj_add_flag(id(puzzle_alpha_container), LV_OBJ_FLAG_HIDDEN);
+                                          lv_obj_add_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                                          
+                                          // Award XP!
+                                          id(add_xp).execute(50);
+                                          
+                                        } else {
+                                          // THEY GUESSED WRONG! Trigger the penalty.
+                                          id(puzzle_failed_penalty).execute();
+                                        }
+
+              # --- TAB 3: DATA (Memory Core) ---
+              - name: "DATA"
+                # Kill scrollbars on this specific page too
+                scrollable: false
+                widgets:
+                  - label:
+                      text: "MEMORY CORE REPAIR"
+                      x: 150
+                      y: 10
+
+                  - label:
+                      text: "TARGET PARITY: 0x1E"
+                      x: 180
+                      y: 300
+                      text_color: pip_unselected
+                      text_font: pip_sub_font
+                      
+                  # 1. THE MAIN PUZZLE GRID
+                  - buttonmatrix:
+                      id: memory_core_grid
+                      x: 20 
+                      y: 60
+                      width: 420
+                      height: 220
+                      items:
+                        text_color: pip_bright
+
+                      rows:
+                        - buttons:
+                          - text: "00"
+                          - text: "0D"
+                          - text: "02"
+                          - text: "01"
+                        - buttons:
+                          - text: "0C"
+                          - text: "09"
+                          - text: "04"
+                          - text: "0A"
+                        - buttons:
+                          - text: "07"
+                          - text: "08"
+                          - text: "06"
+                          - text: "05"
+                        - buttons:
+                          - text: "0B"
+                          - text: "03"
+                          - text: "0E"
+                          - text: "00"
+                      on_click:
+                        - lambda: |-
+                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(memory_core_grid).obj);
+                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
+                            
+                            if (id(locked_cells)[btn_id]) {
+                              ESP_LOGW("ROBCO", "ACCESS DENIED: Cell %d is locked.", btn_id);
+                              return; 
+                            }
+
+                            int val = id(hex_grid)[btn_id];
+                            val += id(input_direction); 
+                            
+                            if (val > 15) val = 0;
+                            if (val < 0) val = 15;
+                            id(hex_grid)[btn_id] = val;
+                            
+                            // Rebuild the LVGL Button Map with Brackets for locked cells!
+                            static char btn_labels[16][8]; // Increased buffer for brackets
+                            static const char *new_map[21]; 
+                            
+                            int map_pos = 0;
+                            for (int i = 0; i < 16; i++) {
+                              if (id(locked_cells)[i]) {
+                                sprintf(btn_labels[i], "[%02X]", id(hex_grid)[i]);
+                              } else if (i == 0) { // Cell 00 is linked to the other Pip-Boy
+                                sprintf(btn_labels[i], "*%02X*", id(hex_grid)[i]);
+                              } else {
+                                sprintf(btn_labels[i], " %02X ", id(hex_grid)[i]);
+                              }
+                              
+                              new_map[map_pos++] = btn_labels[i];
+                              if ((i + 1) % 4 == 0 && i != 15) {
+                                new_map[map_pos++] = "\n";
+                              }
+                            }
+                            new_map[map_pos] = ""; 
+                            lv_btnmatrix_set_map(id(memory_core_grid).obj, new_map);
+
+                            int current_sum = 0;
+                            for (int i = 0; i < 16; i++) {
+                              current_sum += id(hex_grid)[i];
+                            }
+                            
+                            if (current_sum == id(target_sum) && !id(data_solved)) {
+                              id(data_solved) = true;
+                              ESP_LOGI("ROBCO", "PARITY REACHED (0x1E)!");
+                            }
+                            
+                  # 2. THE MODIFIER GRID (+ / -)
+                  - buttonmatrix:
+                      id: modifier_grid
+                      x: 460
+                      y: 60
+                      width: 100
+                      height: 140
+                      one_checked: true 
+                      bg_color: 0x000000
+                      border_width: 0
+                      rows:
+                        - buttons:
+                          - text: "+"
+                        - buttons:
+                          - text: "-"
+                      on_click:
+                        - lambda: |-
+                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(modifier_grid).obj);
+                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
+                            id(input_direction) = (btn_id == 0) ? 1 : -1;
+
+                  # 3. THE REMOTE UPLINK BUTTON
+                  - button:
+                      id: btn_remote_uplink
+                      x: 460
+                      y: 220
+                      width: 100
+                      height: 50
+                      bg_color: 0x000000
+                      border_width: 2
+                      border_color: pip_line
+                      widgets:
+                        - label:
+                            text: "00"
+                            align: CENTER
+                            text_color: pip_bright
+                            text_font: pip_sub_font
+                      on_click:
+                        - lambda: |-
+                            ESP_LOGI("ROBCO", "Transmitting override code to Dweller 612...");
+                            // We will hook your BLE/WiFi transmission code here later!
+
+              # --- TAB 4: MAP ---
+              - name: "MAP"
+                scrollable: false
+                widgets:
+                  # --- THE MAP SIDE NAVIGATION MENU ---
+                  - buttonmatrix: 
+                      id: map_side_menu
+                      x: 10
+                      y: 20
+                      width: 140
+                      height: 250
+                      one_checked: true
+                      items:
+                        text_font: pip_sub_font
+                      # Temporary labels. The boot sequence C++ will override DOC A & B
+                      rows:
+                        - buttons:
+                          - text: "MAP 1"
+                            control: { checkable: true, checked: true }
+                        - buttons:
+                          - text: "MAP 2"
+                            control: { checkable: true, checked: false }
+                        - buttons:
+                          - text: "MAP 3"
+                            control: { checkable: true, checked: false }
+                        - buttons:
+                          - text: "DOC A"
+                            control: { checkable: true, checked: false }
+                        - buttons:
+                          - text: "DOC B"
+                            control: { checkable: true, checked: false }
+                      on_click:
+                        - lambda: |-
+                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(map_side_menu).obj);
+                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
+                            
+                            // 1. Hide ALL sub-pages
+                            lv_obj_add_flag(id(map1_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(map2_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(map3_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(doc_a_page), LV_OBJ_FLAG_HIDDEN);
+                            lv_obj_add_flag(id(doc_b_page), LV_OBJ_FLAG_HIDDEN);
+                            
+                            // 2. Reveal the chosen page
+                            if (btn_id == 0) lv_obj_clear_flag(id(map1_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 1) lv_obj_clear_flag(id(map2_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 2) lv_obj_clear_flag(id(map3_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 3) lv_obj_clear_flag(id(doc_a_page), LV_OBJ_FLAG_HIDDEN);
+                            else if (btn_id == 4) lv_obj_clear_flag(id(doc_b_page), LV_OBJ_FLAG_HIDDEN);
+
+# --- MAP 1 PAGE (Visible by default) ---
+                  - obj:
+                      id: map1_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      scrollable: false
+                      widgets:
+                        - label:
+                            text: "FLOOR PLAN 1"
+                            x: 120
+                            y: 10
+                        
+                        # 1. THE MAP BACKGROUND
+                        - image:
+                            src: map_img_1
+                            x: 10
+                            y: 50  # Shifted down to clear the title text
+                            
+                        # 2. THE RED RADIATION INDICATOR (Drawn on top!)
+                        - obj:
+                            id: map1_rad_led
+                            x: 30  # Adjust X/Y to position the dot over the right room
+                            y: 210
+                            width: 20
+                            height: 20
+                            bg_color: pip_alert
+                            border_width: 0
+                            radius: 10
+
+                  # --- MAP 2 PAGE (Hidden) ---
+                  - obj:
+                      id: map2_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true
+                      scrollable: false
+                      widgets:
+                        - label: { text: "FLOOR PLAN 2", x: 120, y: 10 }
+                        - image: { src: map_img_2, x: 10, y: 50 }
+                        - obj: { id: map2_rad_led, x: 360, y: 80, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+
+                  # --- MAP 3 PAGE (Hidden) ---
+                  - obj:
+                      id: map3_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true
+                      scrollable: false
+                      widgets:
+                        - label: { text: "FLOOR PLAN 3", x: 120, y: 10 }
+                        - image: { src: map_img_3, x: 10, y: 50 }
+                        - obj: { id: map3_rad_led, x: 280, y: 250, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+                        - obj: { id: map3_rad2_led, x: 85, y: 105, width: 20, height: 20, bg_color: pip_alert, border_width: 0, radius: 10 }
+
+                  # --- DOC A PAGE (Hidden) ---
+                  - obj:
+                      id: doc_a_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true
+                      scrollable: true  # Enabled scrolling for text docs!
+                      scrollbar_mode: "AUTO"
+                      widgets:
+                        - label:
+                            id: doc_a_text
+                            text: "AWAITING KTANE UPLINK..."
+                            x: 5
+                            y: 5
+                            width: 400
+                            long_mode: "WRAP"
+                            text_font: pip_sub_font
+
+                  # --- DOC B PAGE (Hidden) ---
+                  - obj:
+                      id: doc_b_page
+                      x: 160
+                      y: 10
+                      width: 420
+                      height: 420
+                      bg_color: 0x000000
+                      border_width: 0
+                      hidden: true
+                      scrollable: true
+                      scrollbar_mode: "AUTO"
+                      widgets:
+                        - label:
+                            id: doc_b_text
+                            text: "AWAITING KTANE UPLINK..."
+                            x: 5
+                            y: 5
+                            width: 400
+                            long_mode: "WRAP"
+                            text_font: pip_sub_font
+
+    # ==========================================
+    # PAGE 2: THE MELTDOWN SEQUENCE (Hidden)
+    # ==========================================
+    - id: meltdown_screen
+      bg_color: 0x330000 # Dark Red Background
+      widgets:
+        - label:
+            text: "CRITICAL ALERT"
+            align: CENTER
+            x: 510
+            y: -40
+            text_color: 0xFF0000 # Bright Red
+            text_font: pip_main_font
+        - label:
+            text: "REACTOR MELTDOWN IMMINENT"
+            align: CENTER
+            x: 510
+            y: 20
+            text_color: 0xFF0000
+            text_font: pip_sub_font# =========================================
+# DWELLER IDENTITY & SECRETS
+# =========================================
+substitutions:
   pip_version: "v2.4.6"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
