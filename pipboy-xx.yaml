@@ -1331,3 +1331,4 @@ lvgl:
             y: 20
             text_color: 0xFF0000
             text_font: pip_sub_font
+# codeword: meltdown
