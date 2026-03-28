@@ -2,7 +2,7 @@
 # DWELLER IDENTITY & SECRETS
 # =========================================
 substitutions:
-  pip_version: "v2.4.2"
+  pip_version: "v2.4.6"
   dweller_id: "793"    # 793 or 612
   other_id: "612"
   device_name: "pipboy-${dweller_id}"
@@ -161,6 +161,16 @@ globals:
   - id: scanner_fudge
     type: int
     initial_value: '0'
+
+# Radiation Smoothing
+  - id: consecutive_high_rads
+    type: int
+    initial_value: '0'
+    restore_value: no
+  - id: is_exposed
+    type: bool
+    initial_value: 'false'
+    restore_value: no
 
 # Inventory State (Index 0 to 3 for the 4 items)
   - id: inv_found
@@ -485,6 +495,49 @@ script:
       # 5. Launch the UI!
       - lvgl.page.show: main_interface
 
+      # 6. Animate the Rad Meter Needle (Calibration Test)
+      - lambda: |-
+          lv_anim_t a;
+          lv_anim_init(&a);
+          
+          // Target the red needle
+          lv_anim_set_var(&a, id(rad_needle));
+          
+          // Move from 0 to the maximum value of 50
+          lv_anim_set_values(&a, 0, 50);
+          
+          // Set the time for the upward movement (800 milliseconds)
+          lv_anim_set_time(&a, 800); 
+          
+          // Set the time for the downward movement (800 milliseconds)
+          lv_anim_set_playback_time(&a, 800); 
+          
+          // Add a brief pause at the top before it falls back down
+          lv_anim_set_playback_delay(&a, 200); 
+          
+          // Use a smooth movement curve
+          lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out); 
+          
+          // Tell the animation how to update the needle position
+          lv_anim_set_exec_cb(&a, [](void * var, int32_t v) {
+              lv_meter_set_indicator_value(id(rad_meter), (lv_meter_indicator_t *)var, v);
+          });
+          
+          // Start the animation
+          lv_anim_start(&a);
+
+  # =========================================
+  # REWARDS AND GAMEPLAY SCRIPTS
+  # =========================================
+  - id: add_xp
+    parameters:
+      amount: int
+    then:
+      - lambda: |-
+          id(vault_xp) += amount;
+          lv_label_set_text_fmt(id(ui_xp_label), "%d", id(vault_xp));
+          ESP_LOGI("ROBCO", "XP Added: %d. Total XP: %d", amount, id(vault_xp));
+
 # =========================================
 # SENSORS (Abridged to essentials for compilation)
 # =========================================
@@ -498,6 +551,45 @@ sensor:
     name: "Pip-Boy Radiation Level"
     id: current_rads
     unit_of_measurement: "RAD"
+
+  # =========================================
+  # SYSTEM DIAGNOSTICS
+  # =========================================
+  - platform: template
+    name: "Pip-Boy Free Internal Heap"
+    id: diag_free_heap
+    unit_of_measurement: "B"
+    icon: "mdi:memory"
+    update_interval: 10s
+    accuracy_decimals: 0
+    lambda: |-
+      return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
+  - platform: template
+    name: "Pip-Boy Largest Free Block"
+    id: diag_largest_block
+    unit_of_measurement: "B"
+    icon: "mdi:memory"
+    update_interval: 10s
+    accuracy_decimals: 0
+    lambda: |-
+      return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
+  - platform: template
+    name: "Pip-Boy Heap Fragmentation"
+    id: diag_heap_frag
+    unit_of_measurement: "%"
+    icon: "mdi:puzzle-outline"
+    update_interval: 10s
+    accuracy_decimals: 1
+    lambda: |-
+      float free_heap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      float largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      
+      if (free_heap > 0) {
+        return 100.0 - ((largest_block / free_heap) * 100.0);
+      }
+      return 0.0;
 
 interval:
   # ---------------------------------------------------------
@@ -514,17 +606,32 @@ interval:
             
             if (c == '\n') {
               // We received a full line! Check if it's a RAD reading.
+
               if (line.rfind("RAD:", 0) == 0) { 
                 // Extract the number (everything after "RAD:")
                 int rads = atoi(line.substr(4).c_str());
                 
-                // 1. Update the graphical arc
-                lv_arc_set_value(id(rad_arc), rads);
+                // --- NEW: Radiation Smoothing Logic ---
+                if (rads > 25) {
+                  id(consecutive_high_rads) += 1;
+                  if (id(consecutive_high_rads) >= 3) {
+                    id(is_exposed) = true;
+                  }
+                } else {
+                  // Reset immediately if rads drop to 25 or below
+                  id(consecutive_high_rads) = 0;
+                  id(is_exposed) = false;
+                }
+
+                // 1. Update the graphical needle
+                lv_meter_set_indicator_value(id(rad_meter), id(rad_needle), rads);
                 
                 // 2. Update the text label
                 lv_label_set_text_fmt(id(rad_label), "%d", rads);
+
+                // 3. ---> NEW: Send the value to Home Assistant <---
+                id(current_rads).publish_state(rads);
               }
-              
               // Clear the buffer for the next message
               line = "";
             } else {
@@ -532,6 +639,29 @@ interval:
               line += (char)c;
             }
           }
+# --- HP DRAIN (Every 3 seconds) ---
+  - interval: 3s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(is_exposed) && id(vault_hp) > 0;'
+          then:
+            - lambda: |-
+                id(vault_hp) -= 1;
+                lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
+                id(telemetry_hp).publish_state(id(vault_hp)); 
+
+  # --- HP RECOVERY (Every 10 seconds) ---
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(is_exposed) && id(vault_hp) < 100;'
+          then:
+            - lambda: |-
+                id(vault_hp) += 1;
+                lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
+                id(telemetry_hp).publish_state(id(vault_hp));
 
 # =========================================
 # DISPLAY CONFIGURATION
@@ -618,20 +748,19 @@ lvgl:
       bg_color: 0x000000
       widgets:
         
-        # --- THE PERSISTENT FOOTER (Shifted +192px to the right) ---
+        # --- THE PERSISTENT FOOTER ---
         - label:
             text: "HP:"
             x: 240
             y: 445
         - label:
+            id: ui_hp_label  # <-- NEW ID
             text: "100"
             x: 290
             y: 445
             
         - label:
             text: ${pip_version}
-            # Replaced BOTTOM_MID alignment with an absolute X coordinate 
-            # to center it perfectly within the new 608px window
             x: 425 
             y: 450
             text_color: pip_unselected
@@ -642,6 +771,7 @@ lvgl:
             x: 672
             y: 445
         - label:
+            id: ui_xp_label  # <-- NEW ID
             text: "0"
             x: 722
             y: 445
@@ -762,39 +892,53 @@ lvgl:
                               - vb15
 
                         # ==========================================
-                        # RAD GAUGE (Stacked Method)
+                        # RAD METER (Replaces the Arc)
                         # ==========================================
-                        - arc:
-                            id: rad_arc
-                            x: 240  #was 450
+                        - meter:
+                            id: rad_meter
+                            x: 240
                             y: 40
                             width: 250
                             height: 250
-                            value: 25
-                            min_value: 0
-                            max_value: 50
-                            adjustable: false
-                            start_angle: 0
-                            end_angle: 180
-                            rotation: 90
-                            arc_color: pip_line
-                            arc_width: 25
-                            arc_opa: 100%
-                            arc_rounded: false
-                            indicator:
-                              arc_color: pip_bright
-                              arc_width: 25
+                            bg_color: 0x000000
+                            border_width: 0
+                            scales:
+                              - range_from: 0
+                                range_to: 50
+                                angle_range: 180
+                                rotation: 90  # Creates a top-half curve
+                                ticks:
+                                  count: 26    # One tick for every two units
+                                  width: 2
+                                  length: 12
+                                  color: pip_bright
+                                indicators:
+                                  # The thick background track
+                                  - arc:
+                                      color: pip_line
+                                      width: 6
+                                      start_value: 0
+                                      end_value: 50
+                                      r_mod: 0
+                                  # The red needle
+                                  - line:
+                                      id: rad_needle
+                                      color: pip_alert 
+                                      width: 4
+                                      value: 25        # Boot position
+                                      r_mod: -5        # Pulls needle tip back from the edge
                             widgets:
+                              # Centres the text inside the meter
                               - label:
-                                  x: 70
-                                  y: 100
                                   text: "RADS"
+                                  align: CENTER
+                                  y: 30
                                   text_font: pip_sub_font
                               - label:
                                   id: rad_label
-                                  x: 80
-                                  y: 125
                                   text: "0"
+                                  align: CENTER
+                                  y: 60
 
                   # --- PAGE 2: S.P.E.C.I.A.L. (Hidden by default) ---
                   - obj:
@@ -898,7 +1042,7 @@ lvgl:
                   # pipboy
                   - image:
                       src: img_pipboy
-                      x: 100
+                      x: 200
                       y: 40
                   
                   # --- INVENTORY BUTTON 1 ---
@@ -1340,4 +1484,3 @@ lvgl:
             y: 20
             text_color: 0xFF0000
             text_font: pip_sub_font
-    #codeword: meltdown
