@@ -6,11 +6,22 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 ## Hardware Architecture
 * **Main Display:** 5" ESP32-S3 Capacitive Touch Display - VIEWE Model：UEDX80480050E-WB-A https://viewedisplay.com/product/esp32-5-inch-800x480-rgb-ips-tft-display-touch-screen-arduino-lvgl/
 * **Co-processor:** ESP32-C3 Super Mini connected via serial. Dedicated to efficient BLE MAC address scanning for radiation hotspots, and driving a haptic motor and piezo speaker for Geiger counter feedback.
-* **RFID/NFC:** PN532 module for localized object scanning.
-* **I/O Expansion:** PCF8575 or MCP23017 I/O expander for managing peripherals like rotary encoders and LEDs.
+* **RFID/NFC:** PN532 module for localized object scanning. (in I2C mode)
+* **I/O Expansion:** PCF8575 or MCP23017 I/O expander for managing peripherals like rotary encoders and LEDs.(have not acquired...  on hold)
 * **Radiation Sources (x4):** Xiao-ESP32-C3 microcontrollers running `esp32_ble_server`.
 * **Note:** the wiring from the rotary encoder is red/black for the push button switch and blue/green/yellow for the encoder portion. (find ports for this ...  and a use!)
 * **Also Note:** There is a speaker buried in the front panel that I still haven't decided what to do with. 
+
+## UEDX80480050E Board GPIO Selection
+* **UART for Co-processor** Used marked Tx/Rx next to GND on left header set.  Also used by USB/UART but available when not updating
+* **PN532** GND=GND, SDA=GPIO19, SCL=GPIO20 on the left and VCC connects to the top of that header
+* 
+## ID's to track ##
+Alpha UID: 04-63-EB-5B-C2-2A-81
+Beta UID: 04-21-75-94-D2-2A-81
+Charlie UID: 04-FA-F4-94-D2-2A-81
+Delta UID: 04-A9-75-5B-C2-2A-81
+
 
 ## Software & Infrastructure
 * **Framework:** ESPHome integrated with Home Assistant.
