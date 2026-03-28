@@ -304,6 +304,10 @@ image:
   - file: "images/perks.jpg"
     id: img_perks
     type: rgb565
+  # Pip boy logo inv
+  - file: "images/pipboylogo.jpg"
+    id: img_pipboy
+    type: rgb565
   # Vault boy walking animation
   - file: "images/vb00.png"
     type: rgb565
@@ -891,6 +895,11 @@ lvgl:
                       text_font: pip_sub_font
                       x: 100
                       y: 10
+                  # pipboy
+                  - image:
+                      src: img_pipboy
+                      x: 100
+                      y: 40
                   
                   # --- INVENTORY BUTTON 1 ---
                   - button:
@@ -1331,4 +1340,4 @@ lvgl:
             y: 20
             text_color: 0xFF0000
             text_font: pip_sub_font
-# codeword: meltdown
+    #codeword: meltdown
