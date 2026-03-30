@@ -1,0 +1,2 @@
+INFO ====
+  This contains all the images for the project
