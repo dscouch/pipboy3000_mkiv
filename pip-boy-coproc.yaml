@@ -10,7 +10,7 @@
 # and is not unique to any one of them.
 # adding in battery monitoring just in case
 
-# version 1.1
+# version 1.2
 
 esphome:
   name: pip-boy-coproc
@@ -95,6 +95,26 @@ sensor:
       - timeout:
           timeout: 5s
           value: -100.0
+
+  # Battery voltage measurement
+  - platform: adc
+    pin: GPIO2
+    id: vbat_sensor
+    name: "Pip-Boy Battery"
+    update_interval: 60s
+    # 11db allows the C3 to read up to ~2.5V. 
+    # With two 100k resistors, your 4.2V battery becomes 2.1V.
+    attenuation: 11db
+    filters:
+      - multiply: 2.0 
+    on_value:
+      then:
+        - lambda: |-
+            char bat_buffer[32];
+            // Sending as "BAT:X.XX" to match your "RAD:X" format
+            sprintf(bat_buffer, "BAT:%.2f\n", x);
+            id(uart_data_bus).write_str(bat_buffer);
+
 
 script:
   - id: geiger_click
