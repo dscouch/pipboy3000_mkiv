@@ -6,6 +6,11 @@
 # the Coproc reports data back to the main display
 # through a serial connection and doesn't have any
 # wifi connectivity with Home Assistant.
+# This can be installed on any of the coprocessors 
+# and is not unique to any one of them.
+# adding in battery monitoring just in case
+
+# version 1.1
 
 esphome:
   name: pip-boy-coproc
@@ -70,21 +75,21 @@ sensor:
           timeout: 5s
           value: -100.0
   - platform: ble_rssi
-    mac_address: "DE:AD:BE:EF:00:02"
+    mac_address: "D4:F9:8D:03:6A:E2"
     id: beacon_2
     filters:
       - timeout:
           timeout: 5s
           value: -100.0
   - platform: ble_rssi
-    mac_address: "DE:AD:BE:EF:00:03"
+    mac_address: "64:E8:33:00:9D:E6"
     id: beacon_3
     filters:
       - timeout:
           timeout: 5s
           value: -100.0
   - platform: ble_rssi
-    mac_address: "DE:AD:BE:EF:00:04"
+    mac_address: "84:FC:E6:00:87:62"
     id: beacon_4
     filters:
       - timeout:
@@ -98,7 +103,7 @@ script:
       - lambda: |-
           if (id(enable_speaker)) id(speaker_pin).turn_on();
           if (id(enable_haptic)) id(haptic_pin).turn_on();
-      - delay: 5ms
+      - delay: 10ms
       - lambda: |-
           id(speaker_pin).turn_off();
       - delay: 100ms 
