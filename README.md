@@ -15,7 +15,7 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 ## UEDX80480050E Board GPIO Selection
 * **UART for Co-processor** Used marked Tx/Rx next to GND on left header set.  Also used by USB/UART but available when not updating
 * **PN532** GND=GND, SDA=GPIO19, SCL=GPIO20 on the left and VCC connects to the top of that header
-* 
+* **5v Power** Tapped the left side of diode D3 that is on VBUS2 of the USB port which enables ability to input 5v from a battery source for regulation into 3V3 VDD
 ## ID's to track ##
 * **Alpha UID:** 04-63-EB-5B-C2-2A-81
 * **Beta UID:** 04-21-75-94-D2-2A-81
