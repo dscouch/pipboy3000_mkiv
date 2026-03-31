@@ -3,8 +3,8 @@
 # =========================================
 substitutions:
 
-  dweller_id: "793"    # 793 or 612
-  other_id: "612"
+  dweller_id: "612"    # 793 or 612
+  other_id: "793"
   device_name: "pipboy-${dweller_id}"
   friendly_name: "Vault Dweller ${dweller_id}"
   
@@ -15,8 +15,8 @@ substitutions:
   cell_612_lock: &lock612 '{true, false, false, false, false, false, false, true, false, true, false, false, false, false, true, false}'
   
   # ACTIVE DWELLER SELECTOR
-  active_grid: *grid793 
-  active_lock: *lock793
+  active_grid: *grid612 
+  active_lock: *lock612
 
   # ----------KEEP EVERYTHING ABOVE HERE SEPARATE-------------
 
@@ -24,7 +24,7 @@ substitutions:
   # Dweller 793: E793X4
   # Dweller 612: D612Z5
 
-  pip_version: "v2.5.3"
+  pip_version: "v2.5.7"
 
 # =========================================
 # ESPHOME 
@@ -291,8 +291,8 @@ pn532_i2c:
               if (id(puzzle_is_open) && id(active_puzzle_id) == scanned_id) {
                 id(active_puzzle_timer) = 10;
                 ESP_LOGI("ROBCO", "Action: Timer reset!");
-                
-              } else if (true || id(is_exposed)) { 
+              
+              } else if (id(ha_cheat_mode).state || id(is_exposed)) {
                 
                 ESP_LOGI("ROBCO", "Action: Opening puzzle interface...");
                 lv_tabview_set_act(id(main_tabs), 1, LV_ANIM_OFF);
@@ -430,6 +430,10 @@ image:
   # Pip boy logo inv
   - file: "images/pipboylogo.jpg"
     id: img_pipboy
+    type: rgb565
+  # Vault Boy Game Over
+  - file: "images/gameover.jpg"
+    id: img_gameover
     type: rgb565
   # Vault boy walking animation
   - file: "images/vb00.png"
@@ -634,6 +638,19 @@ script:
           
           // Start the animation
           lv_anim_start(&a);
+      # 7. Sync Initial Inventory Visibility
+      - lambda: |-
+          // Sync Cache Alpha from Home Assistant
+          if (id(ha_solved_alpha).state) {
+            lv_obj_clear_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
+          } else {
+            lv_obj_add_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
+          }
+          
+          // Sync Beta, Charlie, and Delta from local device memory
+          if (id(inv_solved)[1]) lv_obj_clear_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
+          if (id(inv_solved)[2]) lv_obj_clear_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
+          if (id(inv_solved)[3]) lv_obj_clear_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
 
   # =========================================
   # REWARDS AND GAMEPLAY SCRIPTS
@@ -676,6 +693,13 @@ script:
           
           ESP_LOGW("ROBCO", "Puzzle failed. 25 HP deducted.");
 
+switch:
+  - platform: template
+    name: "Puzzle Cheat Mode"
+    id: ha_cheat_mode
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
 binary_sensor:
   # =========================================
   # SHARED PUZZLE MEMORY (HOME ASSISTANT)
@@ -690,13 +714,12 @@ binary_sensor:
             binary_sensor.is_on: ha_solved_alpha
           then:
             - lambda: |-
+                // Reveal the button when the puzzle is complete
                 lv_obj_clear_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
-                // The specific code for Dweller 793
-                lv_label_set_text(id(lbl_inv_0), "DEC: 7A 9F"); 
           else:
             - lambda: |-
+                // Hide the button if the puzzle resets
                 lv_obj_add_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
-                lv_label_set_text(id(lbl_inv_0), "ENC: ALPHA");
 
 # =========================================
 # SENSORS (Abridged to essentials for compilation)
@@ -774,13 +797,28 @@ interval:
                 // --- NEW: Radiation Smoothing Logic ---
                 if (rads > 25) {
                   id(consecutive_high_rads) += 1;
+                  
+                  // Stop the counter from growing forever
+                  if (id(consecutive_high_rads) > 3) {
+                    id(consecutive_high_rads) = 3;
+                  }
+                  
                   if (id(consecutive_high_rads) >= 3) {
                     id(is_exposed) = true;
                   }
                 } else {
-                  // Reset immediately if rads drop to 25 or below
-                  id(consecutive_high_rads) = 0;
-                  id(is_exposed) = false;
+                  // Decrease the counter instead of resetting instantly
+                  id(consecutive_high_rads) -= 1;
+                  
+                  // Stop the counter from dropping below zero
+                  if (id(consecutive_high_rads) < 0) {
+                    id(consecutive_high_rads) = 0;
+                  }
+
+                  // Only stop the puzzle if the counter reaches zero
+                  if (id(consecutive_high_rads) == 0) {
+                    id(is_exposed) = false;
+                  }
                 }
 
                 // 1. Update the graphical needle
@@ -846,7 +884,7 @@ interval:
                 lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
                 id(telemetry_hp).publish_state(id(vault_hp));
 
-  # --- PUZZLE TIMER (Every 1 second) ---
+# --- PUZZLE TIMER (Every 1 second) ---
   - interval: 1s
     then:
       - if:
@@ -854,8 +892,10 @@ interval:
             lambda: 'return id(puzzle_is_open);'
           then:
             - lambda: |-
-                // Check fail conditions: Time runs out OR radiation is lost
-                if (id(active_puzzle_timer) <= 0 || !id(is_exposed)) {
+                bool cheat_active = id(ha_cheat_mode).state;
+                
+                // Check fail conditions: Time expires OR radiation is lost
+                if (!cheat_active && (id(active_puzzle_timer) <= 0 || !id(is_exposed))) {
                   id(puzzle_is_open) = false;
                   
                   // Hide the puzzle overlay
@@ -863,10 +903,12 @@ interval:
                   
                   ESP_LOGI("ROBCO", "Puzzle aborted. Time expired or radiation lost.");
                 } else {
-                  // Decrease the timer
-                  id(active_puzzle_timer) -= 1;
+                  // Decrease the timer only if cheat mode is disabled
+                  if (!cheat_active && id(active_puzzle_timer) > 0) {
+                    id(active_puzzle_timer) -= 1;
+                  }
                   
-                  // Update the timer label on the screen (we will build this label next)
+                  // Update the timer label on the screen
                   lv_label_set_text_fmt(id(lbl_puzzle_timer), "00:%02d", id(active_puzzle_timer));
                 }
 
@@ -880,7 +922,20 @@ lvgl:
   touchscreens:
     - my_touch
   bg_color: 0x000000
-
+  msgboxes:
+    - id: msgbox_alpha
+      title: "CACHE ALPHA DATA"
+      close_button: true
+      # Force the Pip-Boy styles on the main box
+      bg_color: 0x000000
+      border_width: 2
+      border_color: pip_bright
+      text_color: pip_bright
+      text_font: pip_sub_font
+      body:
+        text: "AWAITING CORRELATION"
+        text_font: pip_sub_font
+        text_color: pip_bright
   # =========================================
   # GLOBAL LVGL STYLES & THEMES
   # =========================================
@@ -1282,22 +1337,41 @@ lvgl:
                   # --- INVENTORY BUTTON 1 ---
                   - button:
                       id: btn_inv_0
-                      x: 20
-                      y: 60
-                      width: 560
+                      x: 30
+                      y: 250
+                      width: 200
                       height: 60
-                      hidden: true  # Invisible until scanned!
+                      hidden: true  # The button starts hidden again
                       widgets:
                         - label:
                             id: lbl_inv_0
-                            text: "[ ENCRYPTED CACHE ALPHA ]"
+                            text: "[ ALPHA ]"
                             align: CENTER
-                      on_click:     # Only open the puzzle if it hasn't been solved yet
-                        - lambda: |-   
-                            if (!id(inv_solved)[0]) {
-                              id(active_inv_puzzle) = 0;
-                              lv_obj_clear_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
+                      on_click:
+                        - lambda: |-
+                            std::string dweller = "${dweller_id}";
+                            lv_obj_t * mbox_text = lv_msgbox_get_text(id(msgbox_alpha));
+                            
+                            if (dweller == "793") {
+                              lv_label_set_text(mbox_text, "ENCRYPTED FRAGMENT:\n\n0x8F 0x22 0x1A\n\n(AWAITING CORRELATION)");
+                            } else {
+                              lv_label_set_text(mbox_text, "ENCRYPTED FRAGMENT:\n\n0x4A 0x9B 0x3C\n\n(AWAITING CORRELATION)");
                             }
+                            
+                            // Fix the close button: remove the blue background and make the 'X' green
+                            lv_obj_t * close_btn = lv_msgbox_get_close_btn(id(msgbox_alpha));
+                            if (close_btn != NULL) {
+                              lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x000000), 0);
+                              lv_obj_set_style_text_color(close_btn, lv_color_hex(0x00FF00), 0);
+                              
+                              // Target the text label inside the button and change it to a standard "X"
+                              lv_obj_t * close_label = lv_obj_get_child(close_btn, 0);
+                              if (close_label != NULL) {
+                                lv_label_set_text(close_label, "X");
+                              }
+                            }
+
+                        - lvgl.widget.show: msgbox_alpha
 
                   # --- INVENTORY BUTTON 2 ---
                   - button:
@@ -1362,12 +1436,12 @@ lvgl:
 # --- INVENTORY PUZZLE OVERLAY ---
                   - obj:
                       id: inv_puzzle_overlay
-                      x: 10
-                      y: 50
+                      x: 0
+                      y: 0
                       width: 580
                       height: 380
                       bg_color: 0x000000
-                      border_width: 2
+                      border_width: 0
                       border_color: pip_bright
                       hidden: true
                       widgets:
