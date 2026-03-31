@@ -24,7 +24,6 @@ substitutions:
   # Dweller 793: E793X4
   # Dweller 612: D612Z5
 
-# New location for Version number
   pip_version: "v2.5.3"
 
 # =========================================
@@ -278,9 +277,13 @@ pn532_i2c:
           else if (uid == "04-a9-75-5b-c2-2a-81" || uid == "04-A9-75-5B-C2-2A-81") scanned_id = 3;
 
           ESP_LOGI("ROBCO", "Mapped to Puzzle ID: %d", scanned_id);
-
-          if (scanned_id != -1) {
-            bool is_solved = id(inv_solved)[scanned_id];
+            if (scanned_id != -1) {
+              bool is_solved = false;
+              if (scanned_id == 0) {
+                is_solved = id(ha_solved_alpha).state;
+              } else {
+                is_solved = id(inv_solved)[scanned_id];
+              }
             ESP_LOGI("ROBCO", "Is it already solved? %s", is_solved ? "YES" : "NO");
             
             if (!is_solved) {
@@ -549,14 +552,21 @@ script:
 
       # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
       - lambda: |-
-          // ---> ANNIHILATE THE BLUE INDICATOR LINE & FOCUS RINGS <---
+
+          // ---> FORCE THE TAB UNDERLINE COLOR <---
+          // (YAML doesn't support LV_PART_INDICATOR on tabviews yet)
           lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
+          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
+          lv_obj_set_style_height(tab_btns, 2, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
+          
+          // ---> ANNIHILATE THE BLUE INDICATOR LINE & FOCUS RINGS <---
+          //lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
           
           // Set the indicator height to 0 across ALL states
-          lv_obj_set_style_height(tab_btns, 0, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_ANY);
+          //lv_obj_set_style_height(tab_btns, 0, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_ANY);
           
           // Ensure the outline (focus ring) is dead across ALL states
-          lv_obj_set_style_outline_width(tab_btns, 0, (uint32_t)LV_PART_ITEMS | (uint32_t)LV_STATE_ANY);
+          //lv_obj_set_style_outline_width(tab_btns, 0, (uint32_t)LV_PART_ITEMS | (uint32_t)LV_STATE_ANY);
 
           // Generate the initial text map with the brackets
           static char init_labels[16][8];
@@ -587,17 +597,6 @@ script:
           id(rad_haptic_enabled) = true;
           lv_obj_add_state(id(switch_rad_sound), LV_STATE_CHECKED);
           lv_obj_add_state(id(switch_rad_haptic), LV_STATE_CHECKED);
-
-      # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
-      - lambda: |-
-          // ---> FORCE THE TAB UNDERLINE COLOR <---
-          // (YAML doesn't support LV_PART_INDICATOR on tabviews yet)
-          lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
-          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
-          lv_obj_set_style_height(tab_btns, 2, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
-
-          // Generate the initial text map with the brackets
-          static char init_labels[16][8];
 
       # ---> START THE VAULT BOY ANIMATION! <---
       - lvgl.animimg.start: vault_boy_anim
@@ -796,14 +795,24 @@ interval:
 
               // NEW: Handle Battery Data
               else if (line.rfind("BAT:", 0) == 0) {
-                // Extract the float value (everything after "BAT:")
+                // Extract the float value 
                 float voltage = atof(line.substr(4).c_str());
                 
-                // Output to the ESPHome Logs
-                ESP_LOGD("display_proc", "Pip-Boy Power: %.2fV", voltage);
+                // Calculate the percentage
+                int percent = (int)(((voltage - 3.2) / (4.2 - 3.2)) * 100.0);
                 
-                // Optional: Update a Home Assistant sensor if you have one defined
-                // id(battery_voltage_sensor).publish_state(voltage);
+                // Keep the percentage safely between 0 and 100
+                if (percent > 100) percent = 100;
+                if (percent < 0) percent = 0;
+                
+                // Output to the ESPHome Logs
+                ESP_LOGD("display_proc", "Pip-Boy Power: %.2fV (%d%%)", voltage, percent);
+                
+                // Update the graphical bar
+                lv_bar_set_value(id(ui_battery_bar), percent, LV_ANIM_OFF);
+                
+                // Update the text percentage
+                lv_label_set_text_fmt(id(ui_battery_label), "%d%%", percent);
               }
               
               // Clear the buffer for the next message
@@ -936,7 +945,7 @@ lvgl:
             id: ui_boot_image
             src: img_vaultboy_thumbsup
             x: 270      # Gives it a nice command-line margin
-            y: 50
+            y: 20
             hidden: true  # Hide it while the text is typing
 
     # ==========================================
@@ -956,10 +965,36 @@ lvgl:
             text: "100"
             x: 290
             y: 445
-            
         - label:
             text: ${pip_version}
-            x: 425 
+            x: 365   # Moved left from 425
+            y: 450
+            text_color: pip_unselected
+            text_font: pip_sub_font
+        # ---> NEW: BATTERY METER <---
+        - bar:
+            id: ui_battery_bar
+            x: 495
+            y: 445
+            width: 100
+            height: 30
+            min_value: 0
+            max_value: 100
+            value: 100
+            bg_color: 0x006600 
+            indicator:
+              bg_color: pip_bright
+        # The Lightning Bolt Overlay 
+        - label:
+            text: "\uF0E7"            # The LVGL charge symbol
+            x: 505                   # Positioned 10 pixels from the left edge of the bar
+            y: 447                   # Aligned to sit inside the bar
+            text_color: 0x000000     # Black colour
+            text_font: montserrat_26 # Forces the internal font
+        - label:
+            id: ui_battery_label
+            text: "100%"
+            x: 605
             y: 450
             text_color: pip_unselected
             text_font: pip_sub_font
@@ -969,10 +1004,11 @@ lvgl:
             x: 672
             y: 445
         - label:
-            id: ui_xp_label  # <-- NEW ID
+            id: ui_xp_label
             text: "0"
             x: 722
             y: 445
+
 
 # --- THE MAIN TABVIEW -----------
         - tabview:
