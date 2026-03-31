@@ -25,7 +25,7 @@ substitutions:
   # Dweller 612: D612Z5
 
 # New location for Version number
-  pip_version: "v2.5.2"
+  pip_version: "v2.5.3"
 
 # =========================================
 # ESPHOME 
@@ -792,7 +792,20 @@ interval:
 
                 // 3. ---> NEW: Send the value to Home Assistant <---
                 id(current_rads).publish_state(rads);
+              } // <--- THIS BRACE WAS MISSING
+
+              // NEW: Handle Battery Data
+              else if (line.rfind("BAT:", 0) == 0) {
+                // Extract the float value (everything after "BAT:")
+                float voltage = atof(line.substr(4).c_str());
+                
+                // Output to the ESPHome Logs
+                ESP_LOGD("display_proc", "Pip-Boy Power: %.2fV", voltage);
+                
+                // Optional: Update a Home Assistant sensor if you have one defined
+                // id(battery_voltage_sensor).publish_state(voltage);
               }
+              
               // Clear the buffer for the next message
               line = "";
             } else {
