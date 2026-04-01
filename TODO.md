@@ -1,21 +1,6 @@
 ### TODO
 
-
-Perfect — this clarifies the intent very well. Below is a **re‑adjusted, succinct TODO list** that reflects:
-
-*   Button / Wires / Keypad for Beta–Delta
-*   10‑second **rescan leash**, not solve time
-*   Prefer **HP pressure**, not instant success
-*   DATA grid using **row/column parity**, not total sum
-*   Individual buttons instead of buttonmatrix
-*   Rescan feedback for solved puzzles
-*   A **dynamic meltdown stabilization puzzle**, not just a timer
-
-This is still **finish‑line focused**. No stretch hardware. No nice‑to‑haves.
-
-***
-
-# ✅ FINAL ADJUSTED TODO LIST (Aligned to Your Intent)
+# ✅ FINAL ADJUSTED TODO LIST
 
 ## A. Core Mechanics (must be solid first)
 
@@ -227,11 +212,3 @@ Your instincts are correct:
 *   DATA grid as individual buttons is the right call
 *   Meltdown as **active stabilization** is much more fun
 
-This is a *very* coherent system now.
-
-If you want next, I can:
-
-*   Sketch **exact rule tables** for Button / Wires / Keypad so you can drop them straight into docs, or
-*   Help you design the **final 8‑fragment + SPECIAL stat cipher** so it is solvable but not guessable.
-
-You are designing this like someone who understands game feel, not just firmware.
