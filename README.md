@@ -17,6 +17,7 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 * **UART for Co-processor** Used marked Tx/Rx next to GND on left header set.  Also used by USB/UART but available when not updating
 * **PN532** GND=GND, SDA=GPIO19, SCL=GPIO20 on the left and VCC connects to the top of that header
 * **5v Power** Tapped the left side of diode D3 that is on VBUS2 of the USB port which enables ability to input 5v from a battery source for regulation into 3V3 VDD
+
 ## ID's to track ##
 * **Alpha UID:** 04-63-EB-5B-C2-2A-81
 * **Beta UID:** 04-21-75-94-D2-2A-81
@@ -24,7 +25,13 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 * **Delta UID:** 04-A9-75-5B-C2-2A-81
 * **1:**  UID: 04-E5-7B-5B-C2-2A-81
 * **2:**  UID: 04-54-55-5B-C2-2A-81
+## DWELLER PIP BOY SERIAL NUMS ##
+* **Dweller 793:** E793X4
+* **Dweller 612:** D612Z5
 
+## UI Design Note ##
+Due to the physical design and shape of the pip-boy the screen is more "squarish" with a portion of the 5" esp32 display actually insde the case and not visible.
+This means that functionally we only have a 600x480 screen starting at x=200, y=0.  All visible UI components and LVGL widgets should be contained in that area of the screen.
 
 ## Software & Infrastructure
 * **Framework:** ESPHome integrated with Home Assistant.
