@@ -52,3 +52,6 @@ A multiplayer Pip-Boy 3000 (Mark IV) replica built for an immersive Easter puzzl
 * **Vaultboy Animation** figure out how to animate him (done)
 * **Boot Screen:** Implementing a realistic Mark IV console-style scrolling text sequence featuring RobCo copyright, the `${pip_version}`, and biometrics initialization. (done)
 * * **RAD meter** reconnect to co-processor for display (done)
+
+## LLM Instructions 
+* Use most current esphome and lvgl commands and language.  Using .obj explicitly in lambda functions will cause compiler errors now.  (you can literally just drop the extension)
