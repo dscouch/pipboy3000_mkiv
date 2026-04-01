@@ -1,5 +1,3 @@
-### TODO
-
 # ✅ FINAL ADJUSTED TODO LIST
 
 ## A. Core Mechanics (must be solid first)
