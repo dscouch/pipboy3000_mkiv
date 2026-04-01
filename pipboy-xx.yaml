@@ -3,8 +3,8 @@
 # =========================================
 substitutions:
 
-  dweller_id: "612"    # 793 or 612
-  other_id: "793"
+  dweller_id: "793"    # 793 or 612
+  other_id: "612"
   device_name: "pipboy-${dweller_id}"
   friendly_name: "Vault Dweller ${dweller_id}"
   
@@ -15,8 +15,8 @@ substitutions:
   cell_612_lock: &lock612 '{true, false, false, false, false, false, false, true, false, true, false, false, false, false, true, false}'
   
   # ACTIVE DWELLER SELECTOR
-  active_grid: *grid612 
-  active_lock: *lock612
+  active_grid: *grid793 
+  active_lock: *lock793
 
   # ----------KEEP EVERYTHING ABOVE HERE SEPARATE-------------
 
@@ -24,7 +24,7 @@ substitutions:
   # Dweller 793: E793X4
   # Dweller 612: D612Z5
 
-  pip_version: "v2.5.7"
+  pip_version: "v2.6.0"
 
 # =========================================
 # ESPHOME 
@@ -160,6 +160,16 @@ globals:
     initial_value: '100'
     restore_value: yes 
     
+  # Death Stuff
+  - id: is_dead
+    type: bool
+    initial_value: 'false'
+    restore_value: yes
+  - id: death_countdown
+    type: int
+    initial_value: '99'
+    restore_value: no
+
   # Reactor Meltdown Status
   - id: meltdown_hold_time
     type: int
@@ -542,115 +552,120 @@ script:
             
       # 3. Hold for dramatic effect when finished
       - delay: 2s  #5s to be annoying
-      
-      # --- NEW: SWAP TO THE THUMBS UP IMAGE ---
-      - lambda: |-
-          // Hide the text block
-          lv_obj_add_flag(id(ui_boot_text), LV_OBJ_FLAG_HIDDEN);
           
-          // Unhide the thumbs up image
-          lv_obj_clear_flag(id(ui_boot_image), LV_OBJ_FLAG_HIDDEN);
-          
-      # Hold the image on screen for a few seconds before loading the UI
-      - delay: 5s
+      # --- BRANCH THE TIMELINE: ALIVE VS DEAD ---
+      - if:
+          condition:
+            lambda: 'return id(is_dead) || id(vault_hp) <= 0;'
+          then:
+            # DEAD: Skip the image, skip grid initialization, proceed to cloning
+            - script.execute: initiate_death_sequence
+          else:
+            # ALIVE: Proceed with the normal happy boot sequence
+            # Swap to the thumbs up image
+            - lambda: |-
+                lv_obj_add_flag(id(ui_boot_text), LV_OBJ_FLAG_HIDDEN);
+                lv_obj_clear_flag(id(ui_boot_image), LV_OBJ_FLAG_HIDDEN);
+                
+            - delay: 5s
 
-      # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
-      - lambda: |-
+            # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
+            - lambda: |-
 
-          // ---> FORCE THE TAB UNDERLINE COLOR <---
-          // (YAML doesn't support LV_PART_INDICATOR on tabviews yet)
-          lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
-          lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
-          lv_obj_set_style_height(tab_btns, 2, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
-          
-          // ---> ANNIHILATE THE BLUE INDICATOR LINE & FOCUS RINGS <---
-          //lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
-          
-          // Set the indicator height to 0 across ALL states
-          //lv_obj_set_style_height(tab_btns, 0, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_ANY);
-          
-          // Ensure the outline (focus ring) is dead across ALL states
-          //lv_obj_set_style_outline_width(tab_btns, 0, (uint32_t)LV_PART_ITEMS | (uint32_t)LV_STATE_ANY);
+                // ---> FORCE THE TAB UNDERLINE COLOR <---
+                // (YAML doesn't support LV_PART_INDICATOR on tabviews yet)
+                lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
+                lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
+                lv_obj_set_style_height(tab_btns, 2, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
+                
+                // ---> ANNIHILATE THE BLUE INDICATOR LINE & FOCUS RINGS <---
+                //lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
+                
+                // Set the indicator height to 0 across ALL states
+                //lv_obj_set_style_height(tab_btns, 0, (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_ANY);
+                
+                // Ensure the outline (focus ring) is dead across ALL states
+                //lv_obj_set_style_outline_width(tab_btns, 0, (uint32_t)LV_PART_ITEMS | (uint32_t)LV_STATE_ANY);
 
-          // Generate the initial text map with the brackets
-          static char init_labels[16][8];
-          static const char *init_map[21]; 
-          int p = 0;
-          for (int i = 0; i < 16; i++) {
-            if (id(locked_cells)[i]) {
-              sprintf(init_labels[i], "[%02X]", id(hex_grid)[i]);
-            } else if (i == 0) {
-              sprintf(init_labels[i], "*%02X*", id(hex_grid)[i]);
-            } else {
-              sprintf(init_labels[i], " %02X ", id(hex_grid)[i]);
-            }
-            init_map[p++] = init_labels[i];
-            if ((i + 1) % 4 == 0 && i != 15) init_map[p++] = "\n";
-          }
-          init_map[p] = ""; 
-          lv_btnmatrix_set_map(id(memory_core_grid).obj, init_map);
+                // Generate the initial text map with the brackets
+                static char init_labels[16][8];
+                static const char *init_map[21]; 
+                int p = 0;
+                for (int i = 0; i < 16; i++) {
+                  if (id(locked_cells)[i]) {
+                    sprintf(init_labels[i], "[%02X]", id(hex_grid)[i]);
+                  } else if (i == 0) {
+                    sprintf(init_labels[i], "*%02X*", id(hex_grid)[i]);
+                  } else {
+                    sprintf(init_labels[i], " %02X ", id(hex_grid)[i]);
+                  }
+                  init_map[p++] = init_labels[i];
+                  if ((i + 1) % 4 == 0 && i != 15) init_map[p++] = "\n";
+                }
+                init_map[p] = ""; 
+                lv_btnmatrix_set_map(id(memory_core_grid).obj, init_map);
 
-          // Inject Dynamic Doc Labels into Map Menu
-          static const char * doc_1_str = (std::string("${dweller_id}") == "793") ? "DOC 1" : "DOC 3";
-          static const char * doc_2_str = (std::string("${dweller_id}") == "793") ? "DOC 2" : "DOC 4";
-          static const char * map_labels[] = {"MAP 1", "\n", "MAP 2", "\n", "MAP 3", "\n", doc_1_str, "\n", doc_2_str, ""};
-          lv_btnmatrix_set_map(id(map_side_menu).obj, map_labels);
+                // Inject Dynamic Doc Labels into Map Menu
+                static const char * doc_1_str = (std::string("${dweller_id}") == "793") ? "DOC 1" : "DOC 3";
+                static const char * doc_2_str = (std::string("${dweller_id}") == "793") ? "DOC 2" : "DOC 4";
+                static const char * map_labels[] = {"MAP 1", "\n", "MAP 2", "\n", "MAP 3", "\n", doc_1_str, "\n", doc_2_str, ""};
+                lv_btnmatrix_set_map(id(map_side_menu).obj, map_labels);
 
-          // Enable the Geiger Counter settings & flip the UI switches!
-          id(rad_sound_enabled) = true;
-          id(rad_haptic_enabled) = true;
-          lv_obj_add_state(id(switch_rad_sound), LV_STATE_CHECKED);
-          lv_obj_add_state(id(switch_rad_haptic), LV_STATE_CHECKED);
+                // Enable the Geiger Counter settings & flip the UI switches!
+                id(rad_sound_enabled) = true;
+                id(rad_haptic_enabled) = true;
+                lv_obj_add_state(id(switch_rad_sound), LV_STATE_CHECKED);
+                lv_obj_add_state(id(switch_rad_haptic), LV_STATE_CHECKED);
 
-      # ---> START THE VAULT BOY ANIMATION! <---
-      - lvgl.animimg.start: vault_boy_anim
+            # Start Vault Boy Animation
+            - lvgl.animimg.start: vault_boy_anim
 
-      # 5. Launch the UI!
-      - lvgl.page.show: main_interface
+            # 5. Launch the UI!
+            - lvgl.page.show: main_interface
 
-      # 6. Animate the Rad Meter Needle (Calibration Test)
-      - lambda: |-
-          lv_anim_t a;
-          lv_anim_init(&a);
-          
-          // Target the red needle
-          lv_anim_set_var(&a, id(rad_needle));
-          
-          // Move from 0 to the maximum value of 50
-          lv_anim_set_values(&a, 0, 50);
-          
-          // Set the time for the upward movement (800 milliseconds)
-          lv_anim_set_time(&a, 800); 
-          
-          // Set the time for the downward movement (800 milliseconds)
-          lv_anim_set_playback_time(&a, 800); 
-          
-          // Add a brief pause at the top before it falls back down
-          lv_anim_set_playback_delay(&a, 200); 
-          
-          // Use a smooth movement curve
-          lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out); 
-          
-          // Tell the animation how to update the needle position
-          lv_anim_set_exec_cb(&a, [](void * var, int32_t v) {
-              lv_meter_set_indicator_value(id(rad_meter), (lv_meter_indicator_t *)var, v);
-          });
-          
-          // Start the animation
-          lv_anim_start(&a);
-      # 7. Sync Initial Inventory Visibility
-      - lambda: |-
-          // Sync Cache Alpha from Home Assistant
-          if (id(ha_solved_alpha).state) {
-            lv_obj_clear_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
-          } else {
-            lv_obj_add_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
-          }
-          
-          // Sync Beta, Charlie, and Delta from local device memory
-          if (id(inv_solved)[1]) lv_obj_clear_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
-          if (id(inv_solved)[2]) lv_obj_clear_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
-          if (id(inv_solved)[3]) lv_obj_clear_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
+            # 6. Animate the Rad Meter Needle (Calibration Test)
+            - lambda: |-
+                lv_anim_t a;
+                lv_anim_init(&a);
+                
+                // Target the red needle
+                lv_anim_set_var(&a, id(rad_needle));
+                
+                // Move from 0 to the maximum value of 50
+                lv_anim_set_values(&a, 0, 50);
+                
+                // Set the time for the upward movement (800 milliseconds)
+                lv_anim_set_time(&a, 800); 
+                
+                // Set the time for the downward movement (800 milliseconds)
+                lv_anim_set_playback_time(&a, 800); 
+                
+                // Add a brief pause at the top before it falls back down
+                lv_anim_set_playback_delay(&a, 200); 
+                
+                // Use a smooth movement curve
+                lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out); 
+                
+                // Tell the animation how to update the needle position
+                lv_anim_set_exec_cb(&a, [](void * var, int32_t v) {
+                    lv_meter_set_indicator_value(id(rad_meter), (lv_meter_indicator_t *)var, v);
+                });
+                
+                // Start the animation
+                lv_anim_start(&a);
+            # 7. Sync Initial Inventory Visibility
+            - lambda: |-
+                // Sync Cache Alpha from Home Assistant
+                if (id(ha_solved_alpha).state) {
+                  lv_obj_clear_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
+                } else {
+                  lv_obj_add_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
+                }
+                
+                // Sync Beta, Charlie, and Delta from local device memory
+                if (id(inv_solved)[1]) lv_obj_clear_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
+                if (id(inv_solved)[2]) lv_obj_clear_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
+                if (id(inv_solved)[3]) lv_obj_clear_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
 
   # =========================================
   # REWARDS AND GAMEPLAY SCRIPTS
@@ -676,22 +691,59 @@ script:
           
           ESP_LOGI("ROBCO", "XP Added: %d. Total XP: %d", amount, id(vault_xp));
 
+#  PUZZLE FAILED PENALTY
   - id: puzzle_failed_penalty
     then:
       - lambda: |-
-          // Deduct 25 HP, but do not drop below 0
+          // Deduct HP and instantly close the puzzle overlay
           id(vault_hp) -= 25;
-          if (id(vault_hp) < 0) id(vault_hp) = 0; 
-          
-          // Update the screen and Home Assistant
-          lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
-          id(telemetry_hp).publish_state(id(vault_hp));
-          
-          // Close the puzzle
           id(puzzle_is_open) = false;
           lv_obj_add_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
           
-          ESP_LOGW("ROBCO", "Puzzle failed. 25 HP deducted.");
+          if (id(vault_hp) <= 0) {
+            // They died. Send them to cloning immediately.
+            id(initiate_death_sequence).execute();
+          } else {
+            // They survived. Update the HP screen and HA.
+            lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
+            id(telemetry_hp).publish_state(id(vault_hp));
+            
+            // Fix the close button on the error message box
+            lv_obj_t * close_btn = lv_msgbox_get_close_btn(id(msgbox_error));
+            if (close_btn != NULL) {
+              lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x000000), 0);
+              lv_obj_set_style_text_color(close_btn, lv_color_hex(0xFF0000), 0);
+              
+              lv_obj_t * close_label = lv_obj_get_child(close_btn, 0);
+              if (close_label != NULL) {
+                lv_label_set_text(close_label, "X");
+              }
+            }
+          }
+          
+      # Show the error pop-up ONLY if they are still alive
+      - if:
+          condition:
+            lambda: 'return id(vault_hp) > 0;'
+          then:
+            - lvgl.widget.show: msgbox_error
+
+  - id: initiate_death_sequence
+    then:
+      - lambda: |-
+          id(is_dead) = true;
+          id(death_countdown) = 99;
+          
+          id(vault_hp) = 0;
+          id(telemetry_hp).publish_state(0);
+          
+      # Give the system 1 second to queue the new zero health state
+      - delay: 1s
+      
+      # Now force the system to write the queue to permanent flash memory
+      - lambda: 'global_preferences->sync();'
+      
+      - lvgl.page.show: death_screen
 
 switch:
   - platform: template
@@ -699,6 +751,14 @@ switch:
     id: ha_cheat_mode
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
+
+# =========================================
+# SYSTEM CONTROLS
+# =========================================
+button:
+  - platform: restart
+    name: "Pip-Boy Reboot"
+    id: sys_restart_btn
 
 binary_sensor:
   # =========================================
@@ -865,19 +925,25 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return id(is_exposed) && id(vault_hp) > 0;'
+            lambda: 'return id(is_exposed) && id(vault_hp) > 0 && !id(is_dead);'
           then:
             - lambda: |-
                 id(vault_hp) -= 1;
-                lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
-                id(telemetry_hp).publish_state(id(vault_hp)); 
+                
+                if (id(vault_hp) <= 0) {
+                  id(initiate_death_sequence).execute();
+                } else {
+                  lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
+                  id(telemetry_hp).publish_state(id(vault_hp)); 
+                }
 
-  # --- HP RECOVERY (Every 10 seconds) ---
+
+# --- HP RECOVERY (Every 10 seconds) ---
   - interval: 10s
     then:
       - if:
           condition:
-            lambda: 'return !id(is_exposed) && id(vault_hp) < 100;'
+            lambda: 'return !id(is_exposed) && id(vault_hp) < 100 && !id(is_dead) && id(vault_hp) > 0;'
           then:
             - lambda: |-
                 id(vault_hp) += 1;
@@ -912,6 +978,40 @@ interval:
                   lv_label_set_text_fmt(id(lbl_puzzle_timer), "00:%02d", id(active_puzzle_timer));
                 }
 
+# --- CLONING TIMER (Every 1 second) ---
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(is_dead) && id(death_countdown) > 0;'
+          then:
+            - lambda: |-
+                // 1. Decrease the timer
+                id(death_countdown) -= 1;
+                lv_label_set_text_fmt(id(ui_death_timer), "T-MINUS %02ds", id(death_countdown));
+                
+            # 2. Did the timer just hit zero?
+            - if:
+                condition:
+                  lambda: 'return id(death_countdown) <= 0;'
+                then:
+                  - lambda: |-
+                      // Restore the vitals
+                      id(is_dead) = false;
+                      id(vault_hp) = 50;
+                      id(telemetry_hp).publish_state(50);
+                      ESP_LOGI("ROBCO", "Cloning complete. Saving and rebooting...");
+                      
+                  # Wait 1 second for the new variables to queue
+                  - delay: 1s
+                  
+                  # Force the permanent save
+                  - lambda: 'global_preferences->sync();'
+                  
+                  # Wait 1 second to ensure the save finishes, then reboot
+                  - delay: 1s
+                  - button.press: sys_restart_btn
+
 # =========================================
 # DISPLAY CONFIGURATION
 # =========================================
@@ -936,6 +1036,17 @@ lvgl:
         text: "AWAITING CORRELATION"
         text_font: pip_sub_font
         text_color: pip_bright
+    - id: msgbox_error
+      title: "SECURITY ALERT"
+      close_button: true
+      bg_color: 0x220000  # Dark red background
+      border_width: 2
+      border_color: pip_alert
+      text_color: pip_alert
+      text_font: pip_sub_font
+      body:
+        text: "INVALID DECRYPTION SEQUENCE.\n\nCOUNTERMEASURES DEPLOYED:\n25 HP DEDUCTED."
+
   # =========================================
   # GLOBAL LVGL STYLES & THEMES
   # =========================================
@@ -1862,5 +1973,35 @@ lvgl:
             y: 20
             text_color: 0xFF0000
             text_font: pip_sub_font
+    # ==========================================
+    # PAGE 3: THE CLONING SEQUENCE (DEATH)
+    # ==========================================
+    - id: death_screen
+      widgets:
+        - obj:
+            id: death_container
+            x: 200
+            y: 0
+            width: 600
+            height: 440
+            bg_color: 0x000000
+            border_width: 0
+            widgets:
+              - image:
+                  src: img_gameover
+                  align: TOP_MID 
+                  y: 50
+              - label:
+                  text: "VAULT DWELLER ${dweller_id}\nHAS SUSTAINED FATAL DAMAGE.\nINITIATING CLONING SEQUENCE..."
+                  align: CENTER
+                  y: 160
+                  text_color: pip_bright
+                  text_font: pip_sub_font
+              - label:
+                  id: ui_death_timer
+                  text: "T-MINUS 99s"
+                  align: TOP_MID
+                  text_color: pip_alert
+                  text_font: pip_main_font
 
 # checksum: 0xFFEE
