@@ -11,8 +11,6 @@
 # adding in battery monitoring just in case
 # uses an esp32-c3 super mini
 
-# version 1.3
-
 # UART = TX: GPIO21, RX: GPIO20
 # Speaker = GPIO4
 # Haptic = GPIO3
