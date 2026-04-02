@@ -192,8 +192,9 @@
 
 ***
 
-## G. Explicitly Out of Scope (good call)
+## G. Stretch goals
 
+*   Sliding scale for HP loss by radiation
 *   Rotary encoder
 *   External speaker logic
 *   Additional sensors
@@ -202,8 +203,6 @@
 ***
 
 ## Bottom‑line design validation
-
-Your instincts are correct:
 
 *   Pressure should come from **HP loss**, not timers
 *   Re‑randomizing puzzles is a feature, not a problem
