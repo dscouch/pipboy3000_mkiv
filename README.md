@@ -59,6 +59,38 @@ This means that functionally we only have a 600x480 screen starting at x=200, y=
 * **Vaultboy Animation** figure out how to animate him (done)
 * **Boot Screen:** Implementing a realistic Mark IV console-style scrolling text sequence featuring RobCo copyright, the `${pip_version}`, and biometrics initialization. (done)
 * * **RAD meter** reconnect to co-processor for display (done)
+ 
+* Final mapping
+***
+
+## Final Puzzle Role & Docs Mapping
+
+| Puzzle (Player‑Facing Name) | Internal Puzzle Type           | Defuser (Interacts with Puzzle) | Docs Holder (Reads Manual) |
+| --------------------------- | ------------------------------ | ------------------------------- | -------------------------- |
+| **Manual Override**         | Button puzzle (KTANE‑inspired) | **Dweller 612**                 | **Dweller 793**            |
+| **Port Manifold** *(Alpha)* | Switch / Port puzzle           | **Dweller 612**                 | **Dweller 793**            |
+| **Signal Bus**              | Wires puzzle                   | **Dweller 793**                 | **Dweller 612**            |
+| **Authorization Lattice**   | Keypad / Grid puzzle           | **Dweller 793**                 | **Dweller 612**            |
+
+***
+
+## Key rules this table encodes (for future you)
+
+*   **612 is the defuser** for puzzles that rely on **serial number logic**  
+    → Manuals must live on **793**
+*   **793 is the defuser** for logic / pattern puzzles  
+    → Manuals must live on **612**
+*   Each Pip‑Boy always has **exactly two manuals**
+*   No Pip‑Boy ever has the manual for the puzzle it is currently defusing
+*   Player‑facing names never reveal the mechanic
+
+This table is now the **source of truth** for:
+
+*   MAP button labeling
+*   DOC routing
+*   Future puzzle expansion
+
+
 
 ## LLM Instructions 
 * Use most current esphome and lvgl commands and language.  Using .obj explicitly in lambda functions will cause compiler errors now.  (you can literally just drop the extension)
