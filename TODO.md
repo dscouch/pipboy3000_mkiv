@@ -199,6 +199,7 @@
 *   External speaker logic
 *   Additional sensors
 *   More animation polish
+*   Turn off Sound and Haptic from HA
 
 ***
 
