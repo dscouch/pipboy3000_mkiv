@@ -1,0 +1,8 @@
+- Platform: ESPHome + LVGL (ESP32-S3)
+- Project: Pip-Boy prop with radiation-based gameplay
+- Core mechanic: radiation exposure state machine (3-up / 3-down)
+- Single source of truth: `id(is_exposed)`
+- Docs glitch on exposure, restore on exit
+- Puzzles require continuous exposure
+- HP drains during exposure, recovers otherwise
+- Strict searchable comment standard: >>> [SYS-XXXX]
