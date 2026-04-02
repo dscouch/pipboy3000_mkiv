@@ -9,14 +9,27 @@
 # This can be installed on any of the coprocessors 
 # and is not unique to any one of them.
 # adding in battery monitoring just in case
+# uses an esp32-c3 super mini
 
-# version 1.2
+# version 1.3
+
+# UART = TX: GPIO21, RX: GPIO20
+# Speaker = GPIO4
+# Haptic = GPIO3
+# Battery = GPIO1
 
 esphome:
   name: pip-boy-coproc
   friendly_name: pip-boy-coproc
   min_version: 2025.11.0
   name_add_mac_suffix: false
+  on_boot:
+    priority: 600
+    then:
+      - lambda: |-
+          ESP_LOGD("boot", "=======================================");
+          ESP_LOGD("boot", "     PIP-BOY CO-PROCESSOR v1.6         ");
+          ESP_LOGD("boot", "=======================================");
 
 esp32:
   variant: esp32c3
@@ -53,10 +66,14 @@ globals:
     initial_value: '0' 
   - id: enable_speaker
     type: bool
-    initial_value: 'true'
+    initial_value: 'false'
   - id: enable_haptic
     type: bool
-    initial_value: 'true'
+    initial_value: 'false'
+  - id: debug_uart
+    type: bool
+    initial_value: 'false'
+
 
 output:
   - platform: gpio
@@ -98,23 +115,21 @@ sensor:
 
   # Battery voltage measurement
   - platform: adc
-    pin: GPIO2
+    pin: GPIO1
     id: vbat_sensor
     name: "Pip-Boy Battery"
-    update_interval: 60s
+    update_interval: 10s    # <-- Updated to 10 seconds
     # 11db allows the C3 to read up to ~2.5V. 
     # With two 100k resistors, your 4.2V battery becomes 2.1V.
-    attenuation: 11db
-    filters:
-      - multiply: 2.0 
+    attenuation: 12db
+    force_update: true      # <-- Ensures it sends even if the voltage hasn't changed
     on_value:
       then:
         - lambda: |-
+            ESP_LOGD("coproc_battery", "Raw Battery Reading: %.2fV", x);
             char bat_buffer[32];
-            // Sending as "BAT:X.XX" to match your "RAD:X" format
-            sprintf(bat_buffer, "BAT:%.2f\n", x);
+            sprintf(bat_buffer, "BATRAW:%.3f\n", x);
             id(uart_data_bus).write_str(bat_buffer);
-
 
 script:
   - id: geiger_click
@@ -162,15 +177,28 @@ interval:
           
           id(current_rads) = rads;
 
-          // 4. Print a clean, comprehensive summary to the log
+          // Print a clean, comprehensive summary to the log
           // We use %.0f to format the floats without messy decimal places
           ESP_LOGD("coproc", "B1:%.0f | B2:%.0f | B3:%.0f | B4:%.0f | MAX:%.0f --> RAD:%d", 
                    readings[0], readings[1], readings[2], readings[3], max_rssi, rads);
                    
-          // 5. Package and send just the Rads to the display!
+          // Package and send just the Rads to the display!
           char buffer[20];
           sprintf(buffer, "RAD:%d\n", rads);
           id(uart_data_bus).write_str(buffer);
+
+          // Write debug logs to the UART if enabled
+          if (id(debug_uart)) {
+            char dbg[128];
+            int max_idx = 0;
+            for (int i = 1; i < 4; i++) if (readings[i] > readings[max_idx]) max_idx = i;
+
+            sprintf(dbg,
+                    "DBG:B1=%.0f,B2=%.0f,B3=%.0f,B4=%.0f,MAX=%.0f,IDX=%d,F=%d\n",
+                    readings[0], readings[1], readings[2], readings[3],
+                    max_rssi, max_idx + 1, id(fudge_factor));
+            id(uart_data_bus).write_str(dbg);
+          }
 
   # ---------------------------------------------------------
   # LOOP 2: THE GEIGER CLICKER (Runs every 20ms)
@@ -199,18 +227,28 @@ interval:
             uint8_t c;
             id(uart_data_bus).read_byte(&c);
             if (c == '\n') {
+              // Sensor calibration
               if (line.rfind("FUDGE:", 0) == 0) { 
                 int new_fudge = atoi(line.substr(6).c_str());
                 id(fudge_factor) = new_fudge;
                 ESP_LOGD("coproc", "Sensitivity Updated! New Fudge Factor: %d", new_fudge);
               }
-              // Add these two listeners:
+              // enable/disable Sound
               else if (line.rfind("SND:", 0) == 0) {
-                id(enable_speaker) = (line.substr(4) == "1");
+                id(enable_speaker) = atoi(line.substr(4).c_str()) == 1;
+                ESP_LOGD("coproc", "Speaker %s", id(enable_speaker) ? "ENABLED" : "DISABLED");
               }
+              // enable/disable Haptic sensor
               else if (line.rfind("HAP:", 0) == 0) {
-                id(enable_haptic) = (line.substr(4) == "1");
+                id(enable_haptic) = atoi(line.substr(4).c_str()) == 1;
+                ESP_LOGD("coproc", "Haptic %s", id(enable_haptic) ? "ENABLED" : "DISABLED");
               }
+              // enable/disable debugging
+              else if (line.rfind("DBG:", 0) == 0) {
+                id(debug_uart) = atoi(line.substr(4).c_str()) == 1;
+                ESP_LOGD("coproc", "UART Debug %s", id(debug_uart) ? "ENABLED" : "DISABLED");
+              }
+
               line = "";
             } else {
               line += (char)c;
