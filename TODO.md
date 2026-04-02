@@ -28,7 +28,7 @@
 
 ***
 
-## B. Radiation Puzzles (Beta / Charlie / Delta)
+## B. Radiation Puzzles (Alpha / Beta / Charlie / Delta)
 
 ### Shared behavior (do once, reused)
 
@@ -49,6 +49,8 @@
 ***
 
 ### Individual puzzle definitions
+
+5.5 **Alpha - something something**
 
 6.  **Beta – Button puzzle**
     *   Inputs:
