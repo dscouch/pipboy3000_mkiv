@@ -202,6 +202,7 @@
 *   Additional sensors
 *   More animation polish
 *   Turn off Sound and Haptic from HA
+*   calibrate battery meters better for each device (it seems incorrect but not critically so)
 
 ***
 
