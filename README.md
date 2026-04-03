@@ -73,6 +73,32 @@ This means that functionally we only have a 600x480 screen starting at x=200, y=
 | **Authorization Lattice**   | Keypad / Grid puzzle           | **Dweller 793**                 | **Dweller 612**            |
 
 ***
+Manual Override – Final Rules
+Seed 0
+
+Button text: ABORT
+If exactly one indicator (CAR or FRK) is lit → PRESS
+Otherwise → HOLD
+Strip: Blue → release when timer shows 8
+
+Seed 1
+
+Button color: Red
+If CAR is lit → PRESS
+Otherwise → HOLD
+
+Seed 2
+
+Button color: Blue
+PRESS only when timer shows 3
+Any other press or any hold → failure
+
+Seed 3
+
+Button color: Black
+Indicators: none
+Always HOLD
+Strip: White → release when timer shows 7
 
 ## Key rules this table encodes (for future you)
 
