@@ -25,35 +25,42 @@ substitutions:
   # Dweller 793: E793X4
   # Dweller 612: D612Z5
 
-# ============================================================================
-# PIP‑BOY SYSTEM INDEX
+# =============================================================================
+# >>> [SYS-INDEX] PIP-BOY SYSTEM INDEX (SEARCH ANCHORS)
 #
-# SYS‑BOOT        Boot sequence & initialization
+# >>> [SYS-BOOT] Boot sequence, version banner, initial UI bring-up
+# >>> [SYS-HA-CONN] Home Assistant API, encryption, and state sync
 #
-# SYS‑RAD‑UART    Coprocessor UART parsing (RAD / BATRAW)
-# SYS‑RAD‑SM      Radiation exposure state machine (3‑up / 3‑down)
+# >>> [SYS-RAD-UART] Coprocessor UART parsing (RAD / BATRAW)
+# >>> [SYS-RAD-SM] Radiation exposure state machine (3-up / 3-down with deadband)
 #
-# SYS‑DOC‑TEXT    Canonical document text (globals)
-# SYS‑DOC‑INIT    Initial DOC injection into UI
-# SYS‑DOC‑STATE   Exposure‑driven DOC state changes
-# SYS‑DOC‑GLITCH  DOC corruption animation
-# SYS‑DOC‑RESTORE DOC restoration after exposure
+# >>> [SYS-DOC-TEXT] Canonical DOC text storage (globals)
+# >>> [SYS-DOC-INIT] Initial DOC injection into LVGL widgets
+# >>> [SYS-DOC-STATE] Exposure-driven DOC state changes (enter / exit)
+# >>> [SYS-DOC-GLITCH] DOC corruption animation during exposure
+# >>> [SYS-DOC-RESTORE] DOC restoration after exposure ends
 #
-# SYS‑UI‑MAP      MAP tab navigation & page logic
-# SYS‑UI‑STAT     STAT tab UI
-# SYS‑UI‑INV      Inventory UI & overlays
-# SYS‑UI‑DATA     Memory core UI
+# >>> [SYS-UI-STAT] STAT tab: status, SPECIAL, perks, toggles
+# >>> [SYS-UI-INV] INV tab: inventory buttons, overlays, puzzle launch
+# >>> [SYS-UI-DATA] DATA tab: memory core puzzle and linked cell logic
+# >>> [SYS-UI-MAP] MAP tab: page navigation and exposure-gated docs access
 #
-# SYS‑GAME‑HP     HP drain, recovery, death
-# SYS‑GAME‑PUZ    Puzzle gating & timers
-# SYS‑GAME‑XP     XP & rewards
+# >>> [SYS-GAME-HP] HP drain, recovery, death triggers, persistence
+# >>> [SYS-GAME-XP] XP tracking and HA override publishing
 #
-# SYS‑DEATH       Cloning / death lifecycle
-# SYS‑DIAG        Diagnostics & telemetry
-# SYS‑CAL         Calibration & tuning values
-# ============================================================================
+# >>> [SYS-GAME-PUZ] Global puzzle lifecycle (gating, timers, variants, exits)
+# >>> [SYS-PUZ-ALPHA] Puzzle Alpha – hardware switch / port logic (shared HA state)
+# >>> [SYS-PUZ-BETA] Puzzle Beta – button-based radiation puzzle
+# >>> [SYS-PUZ-CHARLIE] Puzzle Charlie – wire-cutting radiation puzzle
+# >>> [SYS-PUZ-DELTA] Puzzle Delta – keypad / symbol sequence puzzle
+#
+# >>> [SYS-DEATH] Cloning / death lifecycle and reboot flow
+# >>> [SYS-DIAG] Heap, fragmentation, telemetry, runtime diagnostics
+# >>> [SYS-CAL] Calibration and tuning values (thresholds, offsets, fudge)
+# =============================================================================
 
-  pip_version: "v2.6.5"
+
+  pip_version: "v2.6.8"
 
 # =========================================
 # ESPHOME 
@@ -165,6 +172,18 @@ globals:
     restore_value: yes
     initial_value: ${batt_adc_offset}
 
+# >>> [SYS-DOC-ACCESS] Manual ownership flags
+  - id: has_alpha_beta_docs
+    type: bool
+    initial_value: 'false'
+    restore_value: no
+
+# >>> [SYS-ID] Pip-Boy serial number (used for Manual Override Variant 3)
+  - id: pipboy_serial
+    type: std::string
+    initial_value: ""
+    restore_value: no
+
   # Memory Core Puzzle
   - id: hex_grid
     type: int[16]
@@ -243,6 +262,12 @@ globals:
     initial_value: 'false'
     restore_value: no
 
+# >>> [SYS-PUZ-BETA] Long-press latch to prevent click firing after hold
+  - id: beta_hold_latched
+    type: bool
+    initial_value: "false"
+    restore_value: no
+
 # Inventory State (Index 0 to 3 for the 4 items)
   - id: inv_found
     type: bool[4]
@@ -273,6 +298,22 @@ globals:
     initial_value: '-1'
     restore_value: no
   - id: current_puzzle_seed
+    type: int
+    initial_value: '0'
+    restore_value: no
+
+# >>> [SYS-PUZ-BETA] Beta puzzle state (variant inputs)
+  - id: beta_color
+    type: int
+    initial_value: '0'
+    restore_value: no
+
+  - id: beta_label
+    type: int
+    initial_value: '0'
+    restore_value: no
+
+  - id: beta_indicator
     type: int
     initial_value: '0'
     restore_value: no
@@ -375,7 +416,7 @@ pn532_i2c:
                 is_solved = id(inv_solved)[scanned_id];
               }
             ESP_LOGI("ROBCO", "Is it already solved? %s", is_solved ? "YES" : "NO");
-            
+
             if (!is_solved) {
               
               if (id(puzzle_is_open) && id(active_puzzle_id) == scanned_id) {
@@ -400,7 +441,6 @@ pn532_i2c:
                 // >>> [SYS-GAME-PUZ] Puzzle-specific preparation <<<
                 // >>> [SYS-GAME-PUZ] Show correct puzzle container <<<
                 if (scanned_id == 0) {
-
                   // Ensure Alpha container is visible (already done, but safe)
                   lv_obj_clear_flag(id(puzzle_alpha_container), LV_OBJ_FLAG_HIDDEN);
 
@@ -417,7 +457,30 @@ pn532_i2c:
                   else if (id(current_puzzle_seed) == 3) lv_label_set_text(id(alpha_hint_label), "PORT: 0x4D");
 
                 } else if (scanned_id == 1) {
+                  // >>> [SYS-PUZ-BETA] Show Beta + render current variant inputs <<<
                   lv_obj_clear_flag(id(puzzle_beta_container), LV_OBJ_FLAG_HIDDEN);
+                  id(beta_hold_latched) = false;
+
+                  // Use the already-picked seed (set earlier by puzzle_pick_new_seed)
+                  int seed = id(current_puzzle_seed);
+
+                  // Deterministic variant inputs for now (we will replace with real rules later)
+                  id(beta_color)     = seed;           // 0..3
+                  id(beta_label)     = (seed + 1) % 4; // 0..3
+                  id(beta_indicator) = (seed + 2) % 4; // 0..3
+
+                  // Update the on-screen debug label so you can confirm changes
+                  lv_label_set_text_fmt(
+                    id(beta_debug_label),
+                    "SEED:%d  COL:%d  LAB:%d  IND:%d",
+                    seed,
+                    id(beta_color),
+                    id(beta_label),
+                    id(beta_indicator)
+                  );
+
+                  ESP_LOGI("PUZ", "BETA seed=%d color=%d label=%d ind=%d",
+                          seed, id(beta_color), id(beta_label), id(beta_indicator));
 
                 } else if (scanned_id == 2) {
                   lv_obj_clear_flag(id(puzzle_charlie_container), LV_OBJ_FLAG_HIDDEN);
@@ -432,6 +495,12 @@ pn532_i2c:
               } else {
                 ESP_LOGW("ROBCO", "Action: Denied (Radiation too low)");
               }
+            }
+            // >>> [SYS-GAME-PUZ] Solved puzzle scan feedback (popup, no overlay) <<<
+            if (is_solved) {
+              ESP_LOGI("ROBCO", "Action: Solved cache scanned -> showing solved popup");
+              id(solved_cache_popup).execute();
+              return;
             }
           } else {
             ESP_LOGW("ROBCO", "Error: Unrecognized Tag ID.");
@@ -710,6 +779,14 @@ script:
                 static const char * map_labels[] = {"MAP 1", "\n", "MAP 2", "\n", "MAP 3", "\n", doc_1_btn, "\n", doc_2_btn, ""};
                 lv_btnmatrix_set_map(id(map_side_menu).obj, map_labels);
 
+                // ---> Set dweller specific settings <---------
+                id(has_alpha_beta_docs) = (std::string("${dweller_id}") == "793");
+                if (std::string("${dweller_id}") == "793") {
+                  id(pipboy_serial) = "E793X4";
+                } else {
+                  id(pipboy_serial) = "D612Z5";
+                }
+
                 // >>> [SYS-DOC-INIT] Inject initial DOC text from globals <<<
                 lv_label_set_text(id(doc_a_text), id(doc_a_text_original).c_str());
                 lv_label_set_text(id(doc_b_text), id(doc_b_text_original).c_str());
@@ -719,6 +796,7 @@ script:
                 id(rad_haptic_enabled) = true;
                 lv_obj_add_state(id(switch_rad_sound), LV_STATE_CHECKED);
                 lv_obj_add_state(id(switch_rad_haptic), LV_STATE_CHECKED);
+
 
             # Start Vault Boy Animation
             - lvgl.animimg.start: vault_boy_anim
@@ -882,17 +960,39 @@ script:
 
             # Notify Home Assistant for solved state (define these entities later)
             # Alpha uses unlock_cache_alpha already; keep that special-case.
+            # >>> [SYS-GAME-PUZ] HA sync for solved caches (Alpha/Beta/Charlie/Delta) <<<
             - if:
                 condition:
                   lambda: 'return puzzle_id == 0;'
                 then:
                   - script.execute: unlock_cache_alpha
-                else:
-                  # For Beta/Charlie/Delta you can either:
-                  # A) publish to HA via input_boolean per puzzle, or
-                  # B) keep local only (current design)
-                  - lambda: |-
-                      ESP_LOGI("PUZ", "Puzzle %d solved (local). Add HA notify if desired.", puzzle_id);
+
+            - if:
+                condition:
+                  lambda: 'return puzzle_id == 1;'
+                then:
+                  - homeassistant.service:
+                      service: input_boolean.turn_on
+                      data:
+                        entity_id: input_boolean.cache_beta_solved
+
+            - if:
+                condition:
+                  lambda: 'return puzzle_id == 2;'
+                then:
+                  - homeassistant.service:
+                      service: input_boolean.turn_on
+                      data:
+                        entity_id: input_boolean.cache_charlie_solved
+
+            - if:
+                condition:
+                  lambda: 'return puzzle_id == 3;'
+                then:
+                  - homeassistant.service:
+                      service: input_boolean.turn_on
+                      data:
+                        entity_id: input_boolean.cache_delta_solved
 
 #  PUZZLE FAILED PENALTY
   - id: puzzle_failed_penalty
@@ -947,6 +1047,13 @@ script:
       - lambda: 'global_preferences->sync();'
       
       - lvgl.page.show: death_screen
+
+# >>> [SYS-GAME-PUZ] Solved puzzle scan feedback popup (auto-close) <<<
+  - id: solved_cache_popup
+    then:
+      - lvgl.widget.show: msgbox_solved
+      - delay: 1200ms
+      - lvgl.widget.hide: msgbox_solved
 
   # >>> [SYS-DOC-GLITCH] Visual corruption effect <<< 
   - id: glitch_doc_display
@@ -1017,12 +1124,13 @@ button:
 
 binary_sensor:
   # =========================================
-  # SHARED PUZZLE MEMORY (HOME ASSISTANT)
+  # >>> [SYS-GAME-PUZ] Shared puzzle memory (Home Assistant) - Cache Alpha
   # =========================================
   - platform: homeassistant
     name: "Cache Alpha Sync"
     id: ha_solved_alpha
     entity_id: input_boolean.cache_alpha_solved
+    trigger_on_initial_state: true
     on_state:
       - if:
           condition:
@@ -1035,6 +1143,70 @@ binary_sensor:
             - lambda: |-
                 // Hide the button if the puzzle resets
                 lv_obj_add_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
+# >>> [SYS-GAME-PUZ] Shared puzzle memory (Home Assistant) - Cache Beta
+  - platform: homeassistant
+    name: "Cache Beta Sync"
+    id: ha_solved_beta
+    entity_id: input_boolean.cache_beta_solved
+    trigger_on_initial_state: true
+    on_state:
+      - if:
+          condition:
+            binary_sensor.is_on: ha_solved_beta
+          then:
+            - lambda: |-
+                // Mark as solved locally too (so local logic matches HA)
+                id(inv_solved)[1] = true;
+                // Reveal the inventory button
+                lv_obj_clear_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
+          else:
+            - lambda: |-
+                // Allow reset from HA
+                id(inv_solved)[1] = false;
+                lv_obj_add_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
+# >>> [SYS-GAME-PUZ] Shared puzzle memory (Home Assistant) - Cache Charlie
+  - platform: homeassistant
+    name: "Cache Charlie Sync"
+    id: ha_solved_charlie
+    entity_id: input_boolean.cache_charlie_solved
+    trigger_on_initial_state: true
+    on_state:
+      - if:
+          condition:
+            binary_sensor.is_on: ha_solved_charlie
+          then:
+            - lambda: |-
+                // Mark as solved locally too (so local logic matches HA)
+                id(inv_solved)[2] = true;
+                // Reveal the inventory button
+                lv_obj_clear_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
+          else:
+            - lambda: |-
+                // Allow reset from HA
+                id(inv_solved)[2] = false;
+                lv_obj_add_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
+# >>> [SYS-GAME-PUZ] Shared puzzle memory (Home Assistant) - Cache Delta
+  - platform: homeassistant
+    name: "Cache Delta Sync"
+    id: ha_solved_delta
+    entity_id: input_boolean.cache_delta_solved
+    trigger_on_initial_state: true
+    on_state:
+      - if:
+          condition:
+            binary_sensor.is_on: ha_solved_delta
+          then:
+            - lambda: |-
+                // Mark as solved locally too (so local logic matches HA)
+                id(inv_solved)[3] = true;
+                // Reveal the inventory button
+                lv_obj_clear_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
+          else:
+            - lambda: |-
+                // Allow reset from HA
+                id(inv_solved)[3] = false;
+                lv_obj_add_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
+
 
 # =========================================
 # SENSORS (Abridged to essentials for compilation)
@@ -1184,7 +1356,7 @@ interval:
             }
           }
 # --- HP DRAIN (Every 3 seconds) ---
-  - interval: 3s
+  - interval: 2s
     then:
       - if:
           condition:
@@ -1213,7 +1385,7 @@ interval:
                 lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
                 id(telemetry_hp).publish_state(id(vault_hp));
 
-# --- PUZZLE TIMER (Every 1 second) ---
+  # --- PUZZLE TIMER (Every 1 second) ---
   - interval: 1s
     then:
       - if:
@@ -1221,25 +1393,33 @@ interval:
             lambda: 'return id(puzzle_is_open);'
           then:
             - lambda: |-
-                bool cheat_active = id(ha_cheat_mode).state;
-                
-                // Check fail conditions: Time expires OR radiation is lost
-                if (!cheat_active && (id(active_puzzle_timer) <= 0 || !id(is_exposed))) {
-                  id(puzzle_is_open) = false;
-                  
-                  // Hide the puzzle overlay
-                  lv_obj_add_flag(id(inv_puzzle_overlay), LV_OBJ_FLAG_HIDDEN);
-                  
-                  ESP_LOGI("ROBCO", "Puzzle aborted. Time expired or radiation lost.");
-                } else {
-                  // Decrease the timer only if cheat mode is disabled
-                  if (!cheat_active && id(active_puzzle_timer) > 0) {
-                    id(active_puzzle_timer) -= 1;
+                const bool cheat_active = id(ha_cheat_mode).state;
+
+                // If cheat is off, enforce the two "keep open" rules:
+                // 1) Must maintain exposure
+                // 2) Must rescan within timer window
+                if (!cheat_active) {
+
+                  // Exposure lost -> unified exit (reason 3)
+                  if (!id(is_exposed)) {
+                    ESP_LOGI("PUZ", "Puzzle aborted: exposure lost");
+                    id(puzzle_exit).execute(id(active_puzzle_id), 3);
+                    return;
                   }
-                  
-                  // Update the timer label on the screen
-                  lv_label_set_text_fmt(id(lbl_puzzle_timer), "00:%02d", id(active_puzzle_timer));
+
+                  // Timer expired -> unified exit (reason 2)
+                  if (id(active_puzzle_timer) <= 0) {
+                    ESP_LOGI("PUZ", "Puzzle aborted: rescan timeout");
+                    id(puzzle_exit).execute(id(active_puzzle_id), 2);
+                    return;
+                  }
+
+                  // Still valid -> count down
+                  id(active_puzzle_timer) -= 1;
                 }
+
+                // Update the timer label (even in cheat mode, keep it stable)
+                lv_label_set_text_fmt(id(lbl_puzzle_timer), "00:%02d", id(active_puzzle_timer));
 
 # --- CLONING TIMER (Every 1 second) ---
   - interval: 1s
@@ -1309,6 +1489,20 @@ lvgl:
       text_font: pip_sub_font
       body:
         text: "INVALID DECRYPTION SEQUENCE.\n\nCOUNTERMEASURES DEPLOYED:\n25 HP DEDUCTED."
+      # Messge Solved
+    - id: msgbox_solved
+      title: "CACHE STATUS"
+      close_button: false
+      bg_color: 0x000000
+      border_width: 2
+      border_color: pip_bright
+      text_color: pip_bright
+      text_font: pip_sub_font
+      body:
+        text: "CACHE ALREADY DECRYPTED"
+        text_font: pip_sub_font
+        text_color: pip_bright
+
 
   # =========================================
   # GLOBAL LVGL STYLES & THEMES
@@ -1750,15 +1944,15 @@ lvgl:
                   # --- INVENTORY BUTTON 2 ---
                   - button:
                       id: btn_inv_1
-                      x: 20
-                      y: 130
-                      width: 560
+                      x: 30
+                      y: 310
+                      width: 200
                       height: 60
                       hidden: true
                       widgets:
                         - label:
                             id: lbl_inv_1
-                            text: "[ ENCRYPTED CACHE BETA ]"
+                            text: "[ BETA ]"
                             align: CENTER
                       on_click:
                         - lambda: |-
@@ -1770,15 +1964,15 @@ lvgl:
                   # --- INVENTORY BUTTON 3 ---
                   - button:
                       id: btn_inv_2
-                      x: 20
-                      y: 130
-                      width: 560
+                      x: 370
+                      y: 250
+                      width: 200
                       height: 60
                       hidden: true
                       widgets:
                         - label:
                             id: lbl_inv_2
-                            text: "[ ENCRYPTED CACHE CHARLIE ]"
+                            text: "[ CHARLIE ]"
                             align: CENTER
                       on_click:
                         - lambda: |-
@@ -1790,15 +1984,15 @@ lvgl:
                   # --- INVENTORY BUTTON 4 ---
                   - button:
                       id: btn_inv_3
-                      x: 20
-                      y: 130
-                      width: 560
+                      x: 370
+                      y: 310
+                      width: 200
                       height: 60
                       hidden: true
                       widgets:
                         - label:
                             id: lbl_inv_3
-                            text: "[ ENCRYPTED CACHE DELTA ]"
+                            text: "[ DELTA ]"
                             align: CENTER
                       on_click:
                         - lambda: |-
@@ -1834,7 +2028,7 @@ lvgl:
                             text_font: pip_main_font
 
                         # ==========================================
-                        # >>> [SYS-GAME-PUZ] Puzzle ALPHA – HARDWARE BYPASS PUZZLE <<<
+                        # >>> [SYS-PUZ-ALPHA] Puzzle ALPHA – HARDWARE BYPASS PUZZLE <<<
                         # ==========================================
                         - obj:
                             id: puzzle_alpha_container
@@ -1917,7 +2111,7 @@ lvgl:
                                         id(puzzle_failed_penalty).execute();
                                       }
 
-                        # >>> [SYS-GAME-PUZ] Puzzle Beta – Button puzzle container (shell) <<<
+                        # >>> [SYS-PUZ-BETA] Puzzle Beta – Button puzzle container (shell) <<<
                         - obj:
                             id: puzzle_beta_container
                             x: 10
@@ -1933,8 +2127,109 @@ lvgl:
                                   x: 160
                                   y: 100
                                   text_font: pip_main_font
+                                  # >>> [SYS-PUZ-BETA] Variant debug display
+                              - label:
+                                  id: beta_debug_label
+                                  text: "VARIANT: ---"
+                                  x: 120
+                                  y: 150
+                                  text_font: pip_sub_font
+                                # >>> [SYS-PUZ-BETA] TEMP submit button (always fails for now)
+                              - button:
+                                  id: btn_beta_submit
+                                  x: 190
+                                  y: 190
+                                  width: 180
+                                  height: 60
+                                  widgets:
+                                    - label:
+                                        text: "SUBMIT"
+                                        align: CENTER
+                                  on_long_press:
+                                    - lambda: |-
+                                        id(beta_hold_latched) = true;
+                                        ESP_LOGI("PUZ", "MANUAL OVERRIDE long press detected");
 
-                        # >>> [SYS-GAME-PUZ] Puzzle Charlie – Wires container (shell) <<<
+                                        // >>> [SYS-PUZ-BETA] Variant 4 (seed 3) — HOLD required
+                                        if (id(current_puzzle_seed) == 3) {
+                                          ESP_LOGI("PUZ", "MANUAL OVERRIDE seed 3: HOLD accepted");
+                                          // For now, just mark success
+                                          id(puzzle_exit).execute(1, 0);
+                                        }
+                                  on_click:
+                                    - lambda: |-
+                                        ESP_LOGI("PUZ", "BETA submit pressed");
+                                        if (id(beta_hold_latched)) {
+                                          ESP_LOGI("PUZ", "MANUAL OVERRIDE: click ignored (hold already latched)");
+                                          id(beta_hold_latched) = false;  // clear for next interaction
+                                          return;
+                                        }
+
+                                        // >>> [SYS-PUZ-BETA] Rule Set 1 (seed 0)
+                                        if (id(current_puzzle_seed) == 0) {
+
+                                          bool indicator_on = (id(beta_indicator) == 1);
+
+                                          if (indicator_on) {
+                                            ESP_LOGI("PUZ", "BETA success: indicator ON, button pressed");
+                                            id(puzzle_exit).execute(1, 0);  // success
+                                          } else {
+                                            ESP_LOGW("PUZ", "BETA fail: indicator OFF, button pressed");
+                                            id(puzzle_exit).execute(1, 1);  // wrong input
+                                          }
+
+                                          return;
+                                        }
+
+                                        // >>> [SYS-PUZ-BETA] Rule Set 2 (seed 1)
+                                        if (id(current_puzzle_seed) == 1) {
+
+                                          bool is_red = (id(beta_color) == 3);
+
+                                          if (is_red) {
+                                            ESP_LOGI("PUZ", "BETA success: RED button, immediate press");
+                                            id(puzzle_exit).execute(1, 0);  // success
+                                          } else {
+                                            ESP_LOGW("PUZ", "BETA fail: non-RED button pressed");
+                                            id(puzzle_exit).execute(1, 1);  // wrong input
+                                          }
+
+                                          return;
+                                        }
+
+                                        // >>> [SYS-PUZ-BETA] Rule Set 3 (seed 2) — serial-based (FIXED: uses pipboy_serial)
+                                        if (id(current_puzzle_seed) == 2) {
+
+                                          // Use the real Pip-Boy serial number (example: E793X4, D612Z5)
+                                          const std::string &serial = id(pipboy_serial);
+
+                                          // Safety: if empty, fail closed (treat as odd)
+                                          char last_char = serial.empty() ? '1' : serial.back();
+
+                                          bool last_digit_even = false;
+                                          if (last_char >= '0' && last_char <= '9') {
+                                            int digit = last_char - '0';
+                                            last_digit_even = (digit % 2 == 0);
+                                          }
+
+                                          if (last_digit_even) {
+                                            ESP_LOGI("PUZ", "MANUAL OVERRIDE success: serial '%s' last digit even -> PRESS",
+                                                    serial.c_str());
+                                            id(puzzle_exit).execute(1, 0);  // success
+                                          } else {
+                                            ESP_LOGW("PUZ", "MANUAL OVERRIDE fail: serial '%s' last digit odd/non-digit -> HOLD required",
+                                                    serial.c_str());
+                                            id(puzzle_exit).execute(1, 1);  // wrong input
+                                          }
+
+                                          return;
+                                        }
+
+                                        // Fallback for other seeds (still fail for now)
+                                        ESP_LOGW("PUZ", "BETA seed %d not implemented yet", id(current_puzzle_seed));
+                                        id(puzzle_exit).execute(1, 1);
+
+                        # >>> [SYS-PUZ-CHARLIE] Puzzle Charlie – Wires container (shell) <<<
                         - obj:
                             id: puzzle_charlie_container
                             x: 10
@@ -1951,7 +2246,7 @@ lvgl:
                                   y: 100
                                   text_font: pip_main_font
 
-                        # >>> [SYS-GAME-PUZ] Puzzle Delta – Keypad container (shell) <<<
+                        # >>> [SYS-PUZ-DELTA] Puzzle Delta – Keypad container (shell) <<<
                         - obj:
                             id: puzzle_delta_container
                             x: 10
