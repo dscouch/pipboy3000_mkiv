@@ -60,7 +60,7 @@ substitutions:
 # =============================================================================
 
 
-  pip_version: "v2.6.8"
+  pip_version: "v2.7.1"
 
 # =========================================
 # ESPHOME 
@@ -172,6 +172,12 @@ globals:
     restore_value: yes
     initial_value: ${batt_adc_offset}
 
+# >>> [SYS-BOOT] System initialization flag <<<
+  - id: is_booted
+    type: bool
+    initial_value: 'false'
+    restore_value: no
+
 # >>> [SYS-DOC-ACCESS] Manual ownership flags
   - id: has_alpha_beta_docs
     type: bool
@@ -202,6 +208,10 @@ globals:
     type: int
     restore_value: no
     initial_value: '1' # 1 for forward (+), -1 for backward (-)
+# >>> [SYS-GAME-PUZ] Tracking value for the remote uplink cell <<<
+  - id: mystery_cell_val
+    type: int
+    initial_value: '0'
     
   # RPG Stats
   - id: vault_xp
@@ -211,7 +221,7 @@ globals:
   - id: vault_hp
     type: int
     initial_value: '100'
-    restore_value: yes 
+    restore_value: no 
     
   # Death Stuff
   - id: is_dead
@@ -739,7 +749,7 @@ script:
             # 4. INITIALIZE GRIDS & LOGIC BEFORE SHOWING THE UI!
             - lambda: |-
 
-                // ---> FORCE THE TAB UNDERLINE COLOR <---
+                // ---> FIX all the UI STYLE Issues that don't work in lVGL <---
                 // (YAML doesn't support LV_PART_INDICATOR on tabviews yet)
                 lv_obj_t * tab_btns = lv_tabview_get_tab_btns(id(main_tabs));
                 lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x00FF00), (uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED);
@@ -754,23 +764,31 @@ script:
                 // Ensure the outline (focus ring) is dead across ALL states
                 //lv_obj_set_style_outline_width(tab_btns, 0, (uint32_t)LV_PART_ITEMS | (uint32_t)LV_STATE_ANY);
 
-                // Generate the initial text map with the brackets
-                static char init_labels[16][8];
-                static const char *init_map[21]; 
-                int p = 0;
-                for (int i = 0; i < 16; i++) {
-                  if (id(locked_cells)[i]) {
-                    sprintf(init_labels[i], "[%02X]", id(hex_grid)[i]);
-                  } else if (i == 0) {
-                    sprintf(init_labels[i], "*%02X*", id(hex_grid)[i]);
-                  } else {
-                    sprintf(init_labels[i], " %02X ", id(hex_grid)[i]);
-                  }
-                  init_map[p++] = init_labels[i];
-                  if ((i + 1) % 4 == 0 && i != 15) init_map[p++] = "\n";
+                // INITIALIZE THE GRID in the DATA PUZZLE
+                // ---> INITIALIZE 16 INDIVIDUAL DATA GRID LABELS <---
+                lv_obj_t* labels[16] = {
+                  id(btn_grid_label_0), id(btn_grid_label_1), id(btn_grid_label_2), id(btn_grid_label_3),
+                  id(btn_grid_label_4), id(btn_grid_label_5), id(btn_grid_label_6), id(btn_grid_label_7),
+                  id(btn_grid_label_8), id(btn_grid_label_9), id(btn_grid_label_10), id(btn_grid_label_11),
+                  id(btn_grid_label_12), id(btn_grid_label_13), id(btn_grid_label_14), id(btn_grid_label_15)
+                };
+
+                // >>> [SYS-BOOT] Force sync cell zero with HA before drawing <<<
+                if (!isnan(id(ha_remote_cell_zero).state)) {
+                  id(hex_grid)[0] = (int)id(ha_remote_cell_zero).state;
                 }
-                init_map[p] = ""; 
-                lv_btnmatrix_set_map(id(memory_core_grid).obj, init_map);
+
+                for (int i = 0; i < 16; i++) {
+                  char buf[8];
+                  if (id(locked_cells)[i]) {
+                    sprintf(buf, "[%02X]", id(hex_grid)[i]);
+                  } else if (i == 0) {
+                    sprintf(buf, "*%02X*", id(hex_grid)[i]);
+                  } else {
+                    sprintf(buf, " %02X ", id(hex_grid)[i]);
+                  }
+                  lv_label_set_text(labels[i], buf);
+                }
 
                 // ---> DYNAMIC LABELS FOR THE EXPERT MANUAL <---
                 // We use the single-word button names here
@@ -839,12 +857,27 @@ script:
                 } else {
                   lv_obj_add_flag(id(btn_inv_0), LV_OBJ_FLAG_HIDDEN);
                 }
-                
+                if (id(ha_solved_beta).state) {
+                  lv_obj_clear_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
+                } else {
+                  lv_obj_add_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
+                }
+                if (id(ha_solved_charlie).state) {
+                  lv_obj_clear_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
+                } else {
+                  lv_obj_add_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
+                }
+                if (id(ha_solved_delta).state) {
+                  lv_obj_clear_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
+                } else {
+                  lv_obj_add_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
+                }
                 // Sync Beta, Charlie, and Delta from local device memory
-                if (id(inv_solved)[1]) lv_obj_clear_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
-                if (id(inv_solved)[2]) lv_obj_clear_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
-                if (id(inv_solved)[3]) lv_obj_clear_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
-
+                //if (id(inv_solved)[1]) lv_obj_clear_flag(id(btn_inv_1), LV_OBJ_FLAG_HIDDEN);
+                //if (id(inv_solved)[2]) lv_obj_clear_flag(id(btn_inv_2), LV_OBJ_FLAG_HIDDEN);
+                //if (id(inv_solved)[3]) lv_obj_clear_flag(id(btn_inv_3), LV_OBJ_FLAG_HIDDEN);
+            # 8. Unlock gameplay mechanics
+            - lambda: 'id(is_booted) = true;'
   # =========================================
   # REWARDS AND GAMEPLAY SCRIPTS
   # =========================================
@@ -1031,6 +1064,7 @@ script:
           then:
             - lvgl.widget.show: msgbox_error
 
+# >>> [SYS-DEATH] Cloning / death lifecycle and reboot flow <<<
   - id: initiate_death_sequence
     then:
       - lambda: |-
@@ -1039,13 +1073,7 @@ script:
           
           id(vault_hp) = 0;
           id(telemetry_hp).publish_state(0);
-          
-      # Give the system 1 second to queue the new zero health state
-      - delay: 1s
-      
-      # Now force the system to write the queue to permanent flash memory
-      - lambda: 'global_preferences->sync();'
-      
+     
       - lvgl.page.show: death_screen
 
 # >>> [SYS-GAME-PUZ] Solved puzzle scan feedback popup (auto-close) <<<
@@ -1106,6 +1134,62 @@ script:
           id: doc_b_text
           text: !lambda |-
             return id(doc_b_text_original).c_str();
+
+# >>> [SYS-GAME-PUZ] Magic_square completion check <<<
+  - id: check_magic_square
+    then:
+      - lambda: |-
+          int sums[8] = {0, 0, 0, 0, 0, 0, 0, 0}; 
+          int counts[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+          bool is_valid = true;
+
+          // Group the buttons to change their colours easily
+          lv_obj_t* btns[16] = {
+            id(btn_grid_0), id(btn_grid_1), id(btn_grid_2), id(btn_grid_3),
+            id(btn_grid_4), id(btn_grid_5), id(btn_grid_6), id(btn_grid_7),
+            id(btn_grid_8), id(btn_grid_9), id(btn_grid_10), id(btn_grid_11),
+            id(btn_grid_12), id(btn_grid_13), id(btn_grid_14), id(btn_grid_15)
+          };
+
+          // First pass: Count how many times each number appears on the grid
+          for(int i = 0; i < 16; i++) {
+            counts[id(hex_grid)[i]]++;
+          }
+
+          // Second pass: Highlight duplicates and add up the rows/columns
+          for(int i = 0; i < 16; i++) {
+            int val = id(hex_grid)[i];
+
+            // If a number appears more than once, paint the background 0x003300
+            if(counts[val] > 1) {
+              lv_obj_set_style_bg_color(btns[i], lv_color_hex(0x003300), 0);
+              is_valid = false;
+            } else {
+              // Otherwise, reset to black
+              lv_obj_set_style_bg_color(btns[i], lv_color_hex(0x000000), 0); 
+            }
+
+            // Add to the row sum (indices 0 to 3)
+            sums[i / 4] += val;
+            // Add to the column sum (indices 4 to 7)
+            sums[4 + (i % 4)] += val;
+          }
+
+          // Check if every row and column equals 30 (0x1E)
+          for(int i = 0; i < 8; i++) {
+            if(sums[i] != 30) is_valid = false;
+          }
+
+          // If valid, complete the puzzle
+          if(is_valid && !id(data_solved)) {
+            id(data_solved) = true;
+            ESP_LOGI("ROBCO", "PARITY REACHED: Grid Solved!");
+            
+            // Turn ALL buttons green to celebrate success
+            for(int i = 0; i < 16; i++) {
+               lv_obj_set_style_bg_color(btns[i], lv_color_hex(0x006600), 0);
+            }
+          }
 
 switch:
   - platform: template
@@ -1261,6 +1345,44 @@ sensor:
       }
       return 0.0;
 
+  # >>> [SYS-GAME-PUZ] Shared puzzle memory (Home Assistant) - Magic square
+  # >>> [SYS-HA-CONN] Remote cell receiver and HP sync <<<
+  - platform: homeassistant
+    id: ha_remote_cell_zero
+    entity_id: input_number.dweller_${dweller_id}_cell_zero
+    on_value:
+      - lambda: |-
+          id(hex_grid)[0] = (int)x;
+          
+          char buf[8];
+          // CHANGED: Wraps the value in brackets to look locked
+          sprintf(buf, "[%02X]", (int)x);
+          
+          lv_label_set_text(id(btn_grid_label_0), buf);
+          id(check_magic_square).execute();
+# >>> [SYS-HA-CONN] Outgoing remote cell sync (Mystery Cell dial) <<<
+  - platform: homeassistant
+    id: ha_outgoing_cell_zero
+    entity_id: input_number.dweller_${other_id}_cell_zero
+    on_value:
+      - lambda: |-
+          // Update the local tracking variable
+          id(mystery_cell_val) = (int)x;
+          
+          // Update the text on the UI dial
+          char buf[8];
+          sprintf(buf, "%02X", (int)x);
+          lv_label_set_text(id(lbl_remote_uplink), buf);
+
+  # >>> [SYS-GAME-HP] Reads the saved health from Home Assistant
+  - platform: homeassistant
+    id: ha_vault_hp_sync
+    entity_id: input_number.dweller_${dweller_id}_hp
+    on_value:
+      - lambda: |-
+          id(vault_hp) = (int)x;
+          lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
+
 interval:
   # ---------------------------------------------------------
   # COPROCESSOR LISTENER (Runs every 100ms)
@@ -1355,12 +1477,14 @@ interval:
               line += (char)c;
             }
           }
-# --- HP DRAIN (Every 3 seconds) ---
+
+# --- HP DRAIN (Every 2 seconds) ---
   - interval: 2s
     then:
       - if:
+          # ADDED: id(is_booted) &&
           condition:
-            lambda: 'return id(is_exposed) && id(vault_hp) > 0 && !id(is_dead);'
+            lambda: 'return id(is_booted) && id(is_exposed) && id(vault_hp) > 0 && !id(is_dead);'
           then:
             - lambda: |-
                 id(vault_hp) -= 1;
@@ -1371,26 +1495,25 @@ interval:
                   lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
                   id(telemetry_hp).publish_state(id(vault_hp)); 
                 }
-
-
 # --- HP RECOVERY (Every 10 seconds) ---
   - interval: 10s
     then:
       - if:
+          # ADDED: id(is_booted) &&
           condition:
-            lambda: 'return !id(is_exposed) && id(vault_hp) < 100 && !id(is_dead) && id(vault_hp) > 0;'
+            lambda: 'return id(is_booted) && !id(is_exposed) && id(vault_hp) < 100 && !id(is_dead) && id(vault_hp) > 0;'
           then:
             - lambda: |-
                 id(vault_hp) += 1;
                 lv_label_set_text_fmt(id(ui_hp_label), "%d", id(vault_hp));
                 id(telemetry_hp).publish_state(id(vault_hp));
-
-  # --- PUZZLE TIMER (Every 1 second) ---
+# --- PUZZLE TIMER (Every 1 second) ---
   - interval: 1s
     then:
       - if:
+          # ADDED: id(is_booted) &&
           condition:
-            lambda: 'return id(puzzle_is_open);'
+            lambda: 'return id(is_booted) && id(puzzle_is_open);'
           then:
             - lambda: |-
                 const bool cheat_active = id(ha_cheat_mode).state;
@@ -1442,17 +1565,15 @@ interval:
                       // Restore the vitals
                       id(is_dead) = false;
                       id(vault_hp) = 50;
-                      id(telemetry_hp).publish_state(50);
-                      ESP_LOGI("ROBCO", "Cloning complete. Saving and rebooting...");
                       
-                  # Wait 1 second for the new variables to queue
+                      // Queue the new health state for Home Assistant
+                      id(telemetry_hp).publish_state(50);
+                      ESP_LOGI("ROBCO", "Cloning complete. Transmitting to Overseer and rebooting...");
+                      
+                  # Give the Wi-Fi 1 second to transmit the new 50 HP to Home Assistant
                   - delay: 1s
                   
-                  # Force the permanent save
-                  - lambda: 'global_preferences->sync();'
-                  
-                  # Wait 1 second to ensure the save finishes, then reboot
-                  - delay: 1s
+                  # Reboot the system
                   - button.press: sys_restart_btn
 
 # =========================================
@@ -1505,7 +1626,7 @@ lvgl:
 
 
   # =========================================
-  # GLOBAL LVGL STYLES & THEMES
+  # GLOBAL LVGL THEMES
   # =========================================
   theme:
     label:
@@ -1546,6 +1667,21 @@ lvgl:
           bg_color: pip_bright
       knob:
         bg_color: 0x000000
+# =========================================
+# GLOBAL LVGL STYLES
+# =========================================
+# >>> [SYS-UI-DATA] Shared styling for Memory Core buttons <<<
+  style_definitions:
+    # The style we made for the 16 buttons
+    - id: style_core_btn
+      bg_color: 0x000000
+      border_width: 2
+      border_color: 0x003300
+    # NEW: The style for the Flex Grid gaps
+    - id: style_flex_grid
+      pad_row: 5
+      pad_column: 5
+      
 
   pages:
     # ==========================================
@@ -2013,17 +2149,15 @@ lvgl:
                       border_color: pip_bright
                       hidden: true
                       widgets:
-                        - label:
-                            text: "DECRYPTION REQUIRED"
-                            x: 140
-                            y: 20
-                            
                         # THE COUNTDOWN TIMER (This fixes your compiler error!)
                         - label:
                             id: lbl_puzzle_timer
                             text: "00:10"
-                            x: 240
-                            y: 60
+                            align: TOP_RIGHT
+                            x: -12
+                            y: 8
+                            width: 140
+                            text_align: RIGHT
                             text_color: pip_alert
                             text_font: pip_main_font
 
@@ -2281,85 +2415,339 @@ lvgl:
                       text_font: pip_sub_font
                       
                   # 1. THE MAIN PUZZLE GRID
-                  - buttonmatrix:
-                      id: memory_core_grid
+                  # >>> [SYS-UI-DATA] Memory Core 16-Button Grid (Flex Layout) <<<
+                  - obj:
+                      id: memory_core_grid_container
                       x: 20 
                       y: 60
-                      width: 420
+                      width: 440
                       height: 220
-                      items:
-                        text_color: pip_bright
+                      bg_color: 0x000000
+                      scrollable: false
+                      border_width: 0
+                      
+                      # Now we reference the global style ID!
+                      styles: style_flex_grid
+                        
+                      layout:
+                        type: flex
+                        flex_flow: ROW_WRAP
+                      widgets:
+                        
+                        # --- BUTTON 0 (Remote Link - No Click Action) ---
+                        - button:
+                            id: btn_grid_0
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label:
+                                  id: btn_grid_label_0
+                                  text: ""
+                                  align: CENTER
+                                  text_color: pip_bright
+                                  text_font: pip_main_font
 
-                      rows:
-                        - buttons:
-                          - text: "00"
-                          - text: "0D"
-                          - text: "02"
-                          - text: "01"
-                        - buttons:
-                          - text: "0C"
-                          - text: "09"
-                          - text: "04"
-                          - text: "0A"
-                        - buttons:
-                          - text: "07"
-                          - text: "08"
-                          - text: "06"
-                          - text: "05"
-                        - buttons:
-                          - text: "0B"
-                          - text: "03"
-                          - text: "0E"
-                          - text: "00"
-                      on_click:
-                        - lambda: |-
-                            uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(memory_core_grid).obj);
-                            if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
-                            
-                            if (id(locked_cells)[btn_id]) {
-                              ESP_LOGW("ROBCO", "ACCESS DENIED: Cell %d is locked.", btn_id);
-                              return; 
-                            }
+                        # --- BUTTON 1 ---
+                        - button:
+                            id: btn_grid_1
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_1, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[1]) return;
+                                  int val = id(hex_grid)[1];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[1] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_1), buf);
+                                  id(check_magic_square).execute();
 
-                            int val = id(hex_grid)[btn_id];
-                            val += id(input_direction); 
-                            
-                            if (val > 15) val = 0;
-                            if (val < 0) val = 15;
-                            id(hex_grid)[btn_id] = val;
-                            
-                            // Rebuild the LVGL Button Map with Brackets for locked cells!
-                            static char btn_labels[16][8]; // Increased buffer for brackets
-                            static const char *new_map[21]; 
-                            
-                            int map_pos = 0;
-                            for (int i = 0; i < 16; i++) {
-                              if (id(locked_cells)[i]) {
-                                sprintf(btn_labels[i], "[%02X]", id(hex_grid)[i]);
-                              } else if (i == 0) { // Cell 00 is linked to the other Pip-Boy
-                                sprintf(btn_labels[i], "*%02X*", id(hex_grid)[i]);
-                              } else {
-                                sprintf(btn_labels[i], " %02X ", id(hex_grid)[i]);
-                              }
-                              
-                              new_map[map_pos++] = btn_labels[i];
-                              if ((i + 1) % 4 == 0 && i != 15) {
-                                new_map[map_pos++] = "\n";
-                              }
-                            }
-                            new_map[map_pos] = ""; 
-                            lv_btnmatrix_set_map(id(memory_core_grid).obj, new_map);
+                        # --- BUTTON 2 ---
+                        - button:
+                            id: btn_grid_2
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_2, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[2]) return;
+                                  int val = id(hex_grid)[2];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[2] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_2), buf);
+                                  id(check_magic_square).execute();
 
-                            int current_sum = 0;
-                            for (int i = 0; i < 16; i++) {
-                              current_sum += id(hex_grid)[i];
-                            }
-                            
-                            if (current_sum == id(target_sum) && !id(data_solved)) {
-                              id(data_solved) = true;
-                              ESP_LOGI("ROBCO", "PARITY REACHED (0x1E)!");
-                            }
-                            
+                        # --- BUTTON 3 ---
+                        - button:
+                            id: btn_grid_3
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_3, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[3]) return;
+                                  int val = id(hex_grid)[3];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[3] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_3), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 4 ---
+                        - button:
+                            id: btn_grid_4
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_4, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[4]) return;
+                                  int val = id(hex_grid)[4];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[4] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_4), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 5 ---
+                        - button:
+                            id: btn_grid_5
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_5, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[5]) return;
+                                  int val = id(hex_grid)[5];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[5] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_5), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 6 ---
+                        - button:
+                            id: btn_grid_6
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_6, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[6]) return;
+                                  int val = id(hex_grid)[6];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[6] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_6), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 7 ---
+                        - button:
+                            id: btn_grid_7
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_7, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[7]) return;
+                                  int val = id(hex_grid)[7];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[7] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_7), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 8 ---
+                        - button:
+                            id: btn_grid_8
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_8, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[8]) return;
+                                  int val = id(hex_grid)[8];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[8] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_8), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 9 ---
+                        - button:
+                            id: btn_grid_9
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_9, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[9]) return;
+                                  int val = id(hex_grid)[9];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[9] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_9), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 10 ---
+                        - button:
+                            id: btn_grid_10
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_10, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[10]) return;
+                                  int val = id(hex_grid)[10];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[10] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_10), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 11 ---
+                        - button:
+                            id: btn_grid_11
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_11, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[11]) return;
+                                  int val = id(hex_grid)[11];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[11] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_11), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 12 ---
+                        - button:
+                            id: btn_grid_12
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_12, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[12]) return;
+                                  int val = id(hex_grid)[12];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[12] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_12), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 13 ---
+                        - button:
+                            id: btn_grid_13
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_13, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[13]) return;
+                                  int val = id(hex_grid)[13];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[13] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_13), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 14 ---
+                        - button:
+                            id: btn_grid_14
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_14, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[14]) return;
+                                  int val = id(hex_grid)[14];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[14] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_14), buf);
+                                  id(check_magic_square).execute();
+
+                        # --- BUTTON 15 ---
+                        - button:
+                            id: btn_grid_15
+                            width: 95
+                            height: 45
+                            styles: style_core_btn
+                            widgets:
+                              - label: { id: btn_grid_label_15, text: "", align: CENTER, text_color: pip_bright, text_font: pip_main_font }
+                            on_click:
+                              - lambda: |-
+                                  if (id(locked_cells)[15]) return;
+                                  int val = id(hex_grid)[15];
+                                  val += id(input_direction); 
+                                  if (val > 15) val = 0;
+                                  if (val < 0) val = 15;
+                                  id(hex_grid)[15] = val;
+                                  char buf[8]; sprintf(buf, " %02X ", val);
+                                  lv_label_set_text(id(btn_grid_label_15), buf);
+                                  id(check_magic_square).execute();
+
                   # 2. THE MODIFIER GRID (+ / -)
                   - buttonmatrix:
                       id: modifier_grid
@@ -2373,15 +2761,22 @@ lvgl:
                       rows:
                         - buttons:
                           - text: "+"
+                            # FIX: Make the button checkable and default it to ON
+                            control:
+                              checkable: true
+                              checked: true
                         - buttons:
                           - text: "-"
+                            # FIX: Make the button checkable
+                            control:
+                              checkable: true
                       on_click:
                         - lambda: |-
                             uint16_t btn_id = lv_btnmatrix_get_selected_btn(id(modifier_grid).obj);
                             if (btn_id == LV_BTNMATRIX_BTN_NONE) return;
                             id(input_direction) = (btn_id == 0) ? 1 : -1;
 
-                  # 3. THE REMOTE UPLINK BUTTON
+                  # >>> [SYS-UI-DATA] Remote Uplink Transmission (Mystery Cell) <<<
                   - button:
                       id: btn_remote_uplink
                       x: 460
@@ -2393,14 +2788,38 @@ lvgl:
                       border_color: pip_line
                       widgets:
                         - label:
+                            id: lbl_remote_uplink
                             text: "00"
                             align: CENTER
                             text_color: pip_bright
                             text_font: pip_sub_font
+                      # >>> [SYS-UI-DATA] Remote Uplink Transmission (Mystery Cell) <<<
                       on_click:
                         - lambda: |-
-                            ESP_LOGI("ROBCO", "Transmitting override code to Dweller 612...");
-                            // We will hook your BLE/WiFi transmission code here later!
+                            int val = id(mystery_cell_val);
+                            val += id(input_direction); 
+                            if (val > 15) val = 0;
+                            if (val < 0) val = 15;
+                            id(mystery_cell_val) = val;
+                            
+                            char buf[8];
+                            sprintf(buf, "%02X", val);
+                            lv_label_set_text(id(lbl_remote_uplink), buf);
+                            
+                            // NEW: Print the exact target entity to check for substitution errors
+                            ESP_LOGI("ROBCO", "Transmitting to input_number.dweller_%s_cell_zero : %d", "${other_id}", val);
+                            
+                        - homeassistant.service:
+                            service: input_number.set_value
+                            data:
+                              entity_id: input_number.dweller_${other_id}_cell_zero
+                            
+                            # NEW: The | float filter forces Home Assistant to accept the number
+                            data_template:
+                              value: "{{ my_val | float }}"
+                            variables:
+                              my_val: "return id(mystery_cell_val);"
+
 
               # --- TAB 4: MAP -----------------------------------------------------------------------MAP
               - name: "MAP"
