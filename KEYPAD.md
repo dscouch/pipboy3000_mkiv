@@ -42,7 +42,7 @@ Variant 3 (Q,a,i,w) → Column 3 → order: Q → a → i → w
 Variant 4 (e,B,R,.) → Column 4 → order: e → . → B → R
 Variant 5 (Z,c,?,1) → Column 5 → order: Z → c → ? → 1
 
-👉 Implement the Delta keypad UI logic:
+Implement the Delta keypad UI logic:
 
 4 buttons with glyph font
 Track press order
