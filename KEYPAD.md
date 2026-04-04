@@ -36,11 +36,11 @@ S H w R 1 R
 
 This is just for coding validation later (players derive it from the manual):
 
-Variant 1 (K,C,v,S) → Column 1 → order: K → v → C → S
-Variant 2 ($,+,Y,H) → Column 2 → order: $ → Y → + → H
-Variant 3 (Q,a,i,w) → Column 3 → order: Q → a → i → w
-Variant 4 (e,B,R,.) → Column 4 → order: e → . → B → R
-Variant 5 (Z,c,?,1) → Column 5 → order: Z → c → ? → 1
+* Variant 1 (K,C,v,S) → Column 1 → order: K → v → C → S
+* Variant 2 ($,+,Y,H) → Column 2 → order: $ → Y → + → H
+* Variant 3 (Q,a,i,w) → Column 3 → order: Q → a → i → w
+* Variant 4 (e,B,R,.) → Column 4 → order: e → . → B → R
+* Variant 5 (Z,c,?,1) → Column 5 → order: Z → c → ? → 1
 
 Implement the Delta keypad UI logic:
 
