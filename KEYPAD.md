@@ -23,7 +23,7 @@ Variant 5:
   Keypad: [Z,c,?,1]
   2-column symbols: [Z,1,?,c]
 
-Used symbols:  K,C,v,S,$,+,R,H,Q,a,i,w,e,B,R,.,Z,c,?,1,Y
+Used symbols:  K,C,v,S,$,+,R,H,Q,a,i,w,e,B,.,Z,c,?,1,Y
 A 6 columns of 7 characters each = 42 characters in the doc
 
 a B v S Q e
