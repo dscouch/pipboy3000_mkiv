@@ -328,11 +328,51 @@ globals:
     initial_value: '0'
     restore_value: no
 
+# >>> [SYS-PUZ-DELTA] State tracking
+  - id: delta_variant_id
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: delta_press_index
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: delta_expected_order
+    type: int[4]
+    restore_value: no
+
+  - id: delta_pressed_order
+    type: int[4]
+    restore_value: no
+
+  - id: delta_last_pressed
+    type: int
+    restore_value: no
+
+  # >>> [SYS-PUZ-DELTA] Temp result flag for delayed exit
+  - id: delta_last_result_ok
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
   # >>> [SYS-GAME-PUZ] Per-puzzle last seed (prevents repeating the same variant) <<<
   - id: last_puzzle_seed
     type: int[4]
     initial_value: '{-1, -1, -1, -1}'
     restore_value: no
+
+  # >>> [SYS-DOC-ROUTING] Slot render type flags
+  - id: doc_slot1_is_delta
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: doc_slot2_is_delta
+    type: bool
+    restore_value: no
+    initial_value: "false"
 
   # >>> [SYS-DOC-TEXT] Original document text (restorable) <<<
 
@@ -367,23 +407,27 @@ globals:
       Obtain the active serial number from the defuser's device. 
 
       STEP 1: FIRST CHARACTER ANALYSIS
-      If the serial number begins with a vowel (A, E, I, O, U), proceed to STEP 3. 
+      If the serial number begins with a vowel proceed to STEP 3. 
       If the serial number begins with a consonant, proceed to STEP 2.
 
       STEP 2: TERMINAL DIGIT VERIFICATION
       Inspect the final digit of the serial number. 
       If the digit is even, all switch inputs must be reversed. 
       If the digit is odd, apply standard protocols:
-      - Port 0x1A: Engage switches 1 and 4.
+      - Port 0x1A: Enable switches 1 and 4.
+      - Port 0x1B: Activate switch 3 only
       - Port 0x2B: Engage switches 2 and 3.
-      - Port 0x3C: Engage switches 1, 2, and 3.
+      - Port 0x2C: Activate switches 1 and 2.
+      - Port 0x3C: Turn on switches 1, 2, and 3.
       - Port 0x4D: Engage switch 4 only.
       Do not proceed to STEP 3.
 
       STEP 3: ALTERNATE PROTOCOLS
-      - Port 0x1A: Engage switches 2 and 4.
+      - Port 0x1A: Turn on switches 2 and 4.
+      - Port 0x1B: Activate switch 4 only
       - Port 0x2B: Engage switch 1 only.
-      - Port 0x3C: Engage switches 2, 3, and 4.
+      - Port 0x2C: Activate switches 3 and 4.
+      - Port 0x3C: Enable switches 2, 3, and 4.
       - Port 0x4D: Engage switches 1 and 3.)"
 
   - id: doc_manual_override
@@ -392,8 +436,6 @@ globals:
     initial_value: |
       R"(ROBCO INDUSTRIES 
       MANUAL OVERRIDE MANUAL
-      
-      Operational Instructions
       
       Follow these rules in the order they are listed.
       Perform the first action that applies.
@@ -416,20 +458,29 @@ globals:
 
   - id: doc_signal_bus
     type: std::string
-    initial_value: 'R"(ROBCO INDUSTRIES - WIRE DEFUSAL MANUAL
+    initial_value: |
+      R"(ROBCO INDUSTRIES
+      WIRE DEFUSAL MANUAL
+
       Inspect the 4 exposed wires and apply the following logic in exact order. 
       Stop at the first rule that applies.
+
       RULE 1: If there are exactly two RED wires, cut the LAST RED wire.
       RULE 2: Otherwise, find the FIRST DIGIT in the defusers serial number. 
       If that digit is EVEN, and there is a YELLOW wire, cut the FIRST wire.
       RULE 3: Otherwise, if there are NO BLUE wires, cut the SECOND wire.
       RULE 4: Otherwise, if the last wire is WHITE, cut the THIRD wire.
-      RULE 5: Otherwise, cut the LAST wire.)"'
+      RULE 5: Otherwise, cut the LAST wire.)"
 
   - id: doc_auth_lattice
     type: std::string
-    initial_value: 'R"(ROBCO INDUSTRIES - AUTHORIZATION LATTICE MANUAL
-      This is a placeholder for the Delta puzzle docs.)"'
+    initial_value: |
+      R"(ROBCO INDUSTRIES
+      AUTH LATTICE MANUAL
+
+      Only one column below contains all four symbols from the keypad.
+      Press the four buttons in the order their symbols appear
+      from top to bottom within that column.)"
 
 # =========================================
 # HARDWARE & BUSES
@@ -590,7 +641,7 @@ pn532_i2c:
                     set_led(id(beta_ind_car), true);
                     set_led(id(beta_ind_frk), true);
                     set_strip(id(beta_strip), false, STRIP_BLUE);
-                    lv_label_set_text(id(beta_debug_label), "SEED:0  HOLD  REL:8");
+                    //lv_label_set_text(id(beta_debug_label), "SEED:0  HOLD  REL:8");
                   }
 
                   // Seed 1: DETONATE, red, CAR lit, PRESS
@@ -600,7 +651,7 @@ pn532_i2c:
                     set_led(id(beta_ind_car), true);
                     set_led(id(beta_ind_frk), false);
                     set_strip(id(beta_strip), false, 0x000000);
-                    lv_label_set_text(id(beta_debug_label), "SEED:1  PRESS");
+                    //lv_label_set_text(id(beta_debug_label), "SEED:1  PRESS");
                   }
 
                   // Seed 2: HOLD, blue, PRESS when timer shows 3
@@ -610,7 +661,7 @@ pn532_i2c:
                     set_led(id(beta_ind_car), false);
                     set_led(id(beta_ind_frk), false);
                     set_strip(id(beta_strip), false, 0x000000);
-                    lv_label_set_text(id(beta_debug_label), "SEED:2  PRESS@3");
+                    //lv_label_set_text(id(beta_debug_label), "SEED:2  PRESS@3");
                   }
 
                   // Seed 3: PRESS, black, HOLD, white strip, release on 7
@@ -620,13 +671,13 @@ pn532_i2c:
                     set_led(id(beta_ind_car), false);
                     set_led(id(beta_ind_frk), false);
                     set_strip(id(beta_strip), false, STRIP_WHITE);
-                    lv_label_set_text(id(beta_debug_label), "SEED:3  HOLD  REL:7");
+                    //lv_label_set_text(id(beta_debug_label), "SEED:3  HOLD  REL:7");
                   }
 
                   else {
                     lv_label_set_text(id(beta_main_button_label), "ERROR");
                     set_button_theme(id(beta_main_button), id(beta_main_button_label), 0x000000);
-                    lv_label_set_text(id(beta_debug_label), "SEED:UNKNOWN");
+                    //lv_label_set_text(id(beta_debug_label), "SEED:UNKNOWN");
                   }
 
                 } else if (scanned_id == 2) {
@@ -654,6 +705,7 @@ pn532_i2c:
                 } else if (scanned_id == 3) {
                   // >>> [SYS-PUZ-DELTA] Show Delta + render current variant inputs <<< ------------------------------------DELTA
                   lv_obj_clear_flag(id(puzzle_delta_container), LV_OBJ_FLAG_HIDDEN);
+                  id(delta_init_variant).execute();
                 }
 
                 ESP_LOGI("ROBCO", "Puzzle opened. Generated Seed: %d", id(current_puzzle_seed));
@@ -754,6 +806,11 @@ font:
     glyphs:
       - ' !"%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
       - 'Σ'
+  - file: "Flametick.ttf"
+    id: key_main_font
+    size: 80
+    glyphs:
+      ' KCvS$+RHQaiweB.Zc?1Y'
 
 # =========================================
 # IMAGES & ANIMATIONS
@@ -966,13 +1023,22 @@ script:
                 if (is_793) {
                   doc_1_btn  = "MANUAL OVERRIDE";
                   doc_2_btn  = "PORT MANIFOLD";
-                  doc_1_text = &id(doc_manual_override);   // <-- must exist as std::string global
-                  doc_2_text = &id(doc_port_manifold);     // <-- must exist as std::string global
+                  doc_1_text = &id(doc_manual_override);
+                  doc_2_text = &id(doc_port_manifold);
+
+                  // >>> [SYS-DOC-ROUTING] Slot type flags <<<
+                  id(doc_slot1_is_delta) = false;
+                  id(doc_slot2_is_delta) = false;
+
                 } else {
                   doc_1_btn  = "SIGNAL BUS";
                   doc_2_btn  = "AUTH LATTICE";
-                  doc_1_text = &id(doc_signal_bus);        // <-- must exist as std::string global
-                  doc_2_text = &id(doc_auth_lattice);      // <-- must exist as std::string global
+                  doc_1_text = &id(doc_signal_bus);
+                  doc_2_text = &id(doc_auth_lattice);
+
+                  // >>> [SYS-DOC-ROUTING] Slot type flags <<<
+                  id(doc_slot1_is_delta) = false;
+                  id(doc_slot2_is_delta) = true;   // Delta is in slot 2 on 612
                 }
 
                 // Apply MAP menu labels (DOC slots are buttons 3 and 4)
@@ -1517,6 +1583,180 @@ script:
             ESP_LOGW("PUZ", "Charlie Failure: Cut %d but needed %d", clicked_index, target);
             id(puzzle_exit).execute(2, 1); 
           }
+
+  # >>> [SYS-PUZ-DELTA] Initialize Delta variant and keypad glyphs
+  - id: delta_init_variant
+    then:
+      - lambda: |-
+          // Reset press state
+          id(delta_press_index) = 0;
+
+          // Choose variant (0–4) from puzzle seed
+          id(delta_variant_id) = id(current_puzzle_seed) % 5;
+
+          // Default glyphs
+          char g0='?', g1='?', g2='?', g3='?';
+
+          // Assign glyphs per variant
+          switch (id(delta_variant_id)) {
+
+            case 0:  // Variant 1: K C v S
+              g0='K'; g1='C'; g2='v'; g3='S';
+              break;
+
+            case 1:  // Variant 2: $ + Y H
+              g0='$'; g1='+'; g2='Y'; g3='H';
+              break;
+
+            case 2:  // Variant 3: Q a i w
+              g0='Q'; g1='a'; g2='i'; g3='w';
+              break;
+
+            case 3:  // Variant 4: e B R .
+              g0='e'; g1='B'; g2='R'; g3='.';
+              break;
+
+            case 4:  // Variant 5: Z c ? 1
+              g0='Z'; g1='c'; g2='?'; g3='1';
+              break;
+          }
+
+          // >>> [SYS-PUZ-DELTA] Set expected press order (indices 0..3) <<<
+          // Order is top-to-bottom within the correct column in the manual.
+
+          // We store the expected order as indices (0..3) of the displayed buttons
+          // where g0..g3 correspond to delta_btn_0..delta_btn_3.
+
+          auto idx_of = [&](char ch) -> int {
+            if (g0 == ch) return 0;
+            if (g1 == ch) return 1;
+            if (g2 == ch) return 2;
+            if (g3 == ch) return 3;
+            return -1;
+          };
+
+          if (id(delta_variant_id) == 0) {
+            // K -> v -> C -> S
+            id(delta_expected_order)[0] = idx_of('K');
+            id(delta_expected_order)[1] = idx_of('v');
+            id(delta_expected_order)[2] = idx_of('C');
+            id(delta_expected_order)[3] = idx_of('S');
+          } else if (id(delta_variant_id) == 1) {
+            // $ -> Y -> + -> H
+            id(delta_expected_order)[0] = idx_of('$');
+            id(delta_expected_order)[1] = idx_of('Y');
+            id(delta_expected_order)[2] = idx_of('+');
+            id(delta_expected_order)[3] = idx_of('H');
+          } else if (id(delta_variant_id) == 2) {
+            // Q -> a -> i -> w
+            id(delta_expected_order)[0] = idx_of('Q');
+            id(delta_expected_order)[1] = idx_of('a');
+            id(delta_expected_order)[2] = idx_of('i');
+            id(delta_expected_order)[3] = idx_of('w');
+          } else if (id(delta_variant_id) == 3) {
+            // e -> . -> B -> R
+            id(delta_expected_order)[0] = idx_of('e');
+            id(delta_expected_order)[1] = idx_of('.');
+            id(delta_expected_order)[2] = idx_of('B');
+            id(delta_expected_order)[3] = idx_of('R');
+          } else {
+            // Variant 5: Z -> c -> ? -> 1
+            id(delta_expected_order)[0] = idx_of('Z');
+            id(delta_expected_order)[1] = idx_of('c');
+            id(delta_expected_order)[2] = idx_of('?');
+            id(delta_expected_order)[3] = idx_of('1');
+          }
+
+          // Debug log (helps confirm mapping)
+          ESP_LOGI("PUZ", "DELTA expected order indices: %d %d %d %d",
+                  id(delta_expected_order)[0],
+                  id(delta_expected_order)[1],
+                  id(delta_expected_order)[2],
+                  id(delta_expected_order)[3]);
+
+          // Apply glyphs to buttons
+          lv_label_set_text(id(delta_lbl_0), std::string(1, g0).c_str());
+          lv_label_set_text(id(delta_lbl_1), std::string(1, g1).c_str());
+          lv_label_set_text(id(delta_lbl_2), std::string(1, g2).c_str());
+          lv_label_set_text(id(delta_lbl_3), std::string(1, g3).c_str());
+
+          // Reset button visuals
+          lv_obj_set_style_bg_color(id(delta_btn_0), lv_color_hex(0x000000), 0);
+          lv_obj_set_style_bg_color(id(delta_btn_1), lv_color_hex(0x000000), 0);
+          lv_obj_set_style_bg_color(id(delta_btn_2), lv_color_hex(0x000000), 0);
+          lv_obj_set_style_bg_color(id(delta_btn_3), lv_color_hex(0x000000), 0);
+
+          // Reset status indicator to red
+          lv_obj_set_style_bg_color(id(delta_status_led), lv_color_hex(0x660000), 0);
+
+  # >>> [SYS-PUZ-DELTA] Handle Delta button press (record only)
+  - id: delta_button_pressed
+    then:
+      - lambda: |-
+          int btn = id(delta_last_pressed);
+
+          // Ignore extra presses
+          if (id(delta_press_index) >= 4) {
+            return;
+          }
+
+          // Record press
+          id(delta_pressed_order)[id(delta_press_index)] = btn;
+          id(delta_press_index)++;
+
+          // Visual feedback: dim green
+          lv_obj_t *obj = nullptr;
+          if (btn == 0) obj = id(delta_btn_0);
+          if (btn == 1) obj = id(delta_btn_1);
+          if (btn == 2) obj = id(delta_btn_2);
+          if (btn == 3) obj = id(delta_btn_3);
+
+          if (obj != nullptr) {
+            lv_obj_set_style_bg_color(obj, lv_color_hex(0x003300), 0);
+          }
+
+          ESP_LOGI("PUZ", "DELTA pressed button %d (count=%d)",
+                  btn, id(delta_press_index));
+
+          if (id(delta_press_index) == 4) {
+            id(delta_validate_and_finish).execute();
+          }                
+
+  # >>> [SYS-PUZ-DELTA] Validate order and finish (success/fail)
+  - id: delta_validate_and_finish
+    then:
+      - lambda: |-
+          bool ok = true;
+          for (int i = 0; i < 4; i++) {
+            if (id(delta_pressed_order)[i] != id(delta_expected_order)[i]) {
+              ok = false;
+              break;
+            }
+          }
+
+          ESP_LOGI("PUZ", "DELTA validate: %s", ok ? "SUCCESS" : "FAIL");
+
+          if (ok) {
+            // Turn indicator green immediately
+            lv_obj_set_style_bg_color(id(delta_status_led), lv_color_hex(0x006600), 0);
+          }
+
+          // Store result in a global so we can branch after delay (no async)
+          id(delta_last_result_ok) = ok;
+
+      - delay: 1200ms
+
+      - if:
+          condition:
+            lambda: 'return id(delta_last_result_ok);'
+          then:
+            # Success: puzzle_id=3, reason=0
+            - lambda: |-
+                id(puzzle_exit).execute(3, 0);
+          else:
+            # Fail: puzzle_id=3, reason=1 (penalty)
+            - lambda: |-
+                id(puzzle_exit).execute(3, 1);
 
 # >>> [SYS-GAME-PUZ] Trigger rewards for Data Core success <<<
   - id: award_data_win
@@ -2609,23 +2849,24 @@ lvgl:
                                         text_color: pip_bright
 
                                     # Small status line (optional, keep for now)
-                                    - label:
-                                        id: beta_debug_label
-                                        text: "VARIANT: ---"
-                                        align: TOP_LEFT
-                                        x: 5
-                                        y: 34
-                                        text_font: pip_sub_font
-                                        text_color: pip_unselected
+                                    # - label:
+                                    #     id: beta_debug_label
+                                    #     text: "VARIANT: ---"
+                                    #     align: TOP_LEFT
+                                    #     x: 5
+                                    #     y: 34
+                                    #     text_font: pip_sub_font
+                                    #     text_color: pip_unselected
 
                                     # Indicators row (top-right-ish, but still inside)
                                     - obj:
                                         id: beta_ind_car
                                         align: TOP_LEFT
-                                        x: 230
-                                        y: 10
-                                        width: 20
-                                        height: 20
+                                        x: 5
+                                        y: 100
+                                        width: 30
+                                        height: 30
+                                        radius: 15
                                         bg_color: 0x000000
                                         border_width: 2
                                         border_color: pip_bright
@@ -2635,18 +2876,19 @@ lvgl:
                                         id: beta_ind_car_label
                                         text: "CAR"
                                         align: TOP_LEFT
-                                        x: 260
-                                        y: 8
+                                        x: 50
+                                        y: 100
                                         text_font: pip_sub_font
                                         text_color: pip_bright
 
                                     - obj:
                                         id: beta_ind_frk
                                         align: TOP_LEFT
-                                        x: 330
-                                        y: 10
-                                        width: 20
-                                        height: 20
+                                        x: 5
+                                        y: 250
+                                        width: 30
+                                        height: 30
+                                        radius: 15
                                         bg_color: 0x000000
                                         border_width: 2
                                         border_color: pip_bright
@@ -2656,8 +2898,8 @@ lvgl:
                                         id: beta_ind_frk_label
                                         text: "FRK"
                                         align: TOP_LEFT
-                                        x: 360
-                                        y: 8
+                                        x: 50
+                                        y: 250
                                         text_font: pip_sub_font
                                         text_color: pip_bright
 
@@ -2723,108 +2965,13 @@ lvgl:
                                               text_font: pip_sub_font
                                               text_color: pip_unselected
 
-
-                              # - button:
-                              #     id: btn_beta_submit
-                              #     x: 190
-                              #     y: 190
-                              #     width: 180
-                              #     height: 60
-                              #     widgets:
-                              #       - label:
-                              #           text: "SUBMIT"
-                              #           align: CENTER
-                              #     on_long_press:
-                              #       - lambda: |-
-                              #           id(beta_hold_latched) = true;
-                              #           ESP_LOGI("PUZ", "MANUAL OVERRIDE long press detected");
-
-                              #           // >>> [SYS-PUZ-BETA] Variant 4 (seed 3) — HOLD required
-                              #           if (id(current_puzzle_seed) == 3) {
-                              #             ESP_LOGI("PUZ", "MANUAL OVERRIDE seed 3: HOLD accepted");
-                              #             // For now, just mark success
-                              #             id(puzzle_exit).execute(1, 0);
-                              #           }
-                              #     on_click:
-                              #       - lambda: |-
-                              #           ESP_LOGI("PUZ", "BETA submit pressed");
-                              #           if (id(beta_hold_latched)) {
-                              #             ESP_LOGI("PUZ", "MANUAL OVERRIDE: click ignored (hold already latched)");
-                              #             id(beta_hold_latched) = false;  // clear for next interaction
-                              #             return;
-                              #           }
-
-                              #           // >>> [SYS-PUZ-BETA] Rule Set 1 (seed 0)
-                              #           if (id(current_puzzle_seed) == 0) {
-
-                              #             bool indicator_on = (id(beta_indicator) == 1);
-
-                              #             if (indicator_on) {
-                              #               ESP_LOGI("PUZ", "BETA success: indicator ON, button pressed");
-                              #               id(puzzle_exit).execute(1, 0);  // success
-                              #             } else {
-                              #               ESP_LOGW("PUZ", "BETA fail: indicator OFF, button pressed");
-                              #               id(puzzle_exit).execute(1, 1);  // wrong input
-                              #             }
-
-                              #             return;
-                              #           }
-
-                              #           // >>> [SYS-PUZ-BETA] Rule Set 2 (seed 1)
-                              #           if (id(current_puzzle_seed) == 1) {
-
-                              #             bool is_red = (id(beta_color) == 3);
-
-                              #             if (is_red) {
-                              #               ESP_LOGI("PUZ", "BETA success: RED button, immediate press");
-                              #               id(puzzle_exit).execute(1, 0);  // success
-                              #             } else {
-                              #               ESP_LOGW("PUZ", "BETA fail: non-RED button pressed");
-                              #               id(puzzle_exit).execute(1, 1);  // wrong input
-                              #             }
-
-                              #             return;
-                              #           }
-
-                              #           // >>> [SYS-PUZ-BETA] Rule Set 3 (seed 2) — serial-based (FIXED: uses pipboy_serial)
-                              #           if (id(current_puzzle_seed) == 2) {
-
-                              #             // Use the real Pip-Boy serial number (example: E793X4, D612Z5)
-                              #             const std::string &serial = id(pipboy_serial);
-
-                              #             // Safety: if empty, fail closed (treat as odd)
-                              #             char last_char = serial.empty() ? '1' : serial.back();
-
-                              #             bool last_digit_even = false;
-                              #             if (last_char >= '0' && last_char <= '9') {
-                              #               int digit = last_char - '0';
-                              #               last_digit_even = (digit % 2 == 0);
-                              #             }
-
-                              #             if (last_digit_even) {
-                              #               ESP_LOGI("PUZ", "MANUAL OVERRIDE success: serial '%s' last digit even -> PRESS",
-                              #                       serial.c_str());
-                              #               id(puzzle_exit).execute(1, 0);  // success
-                              #             } else {
-                              #               ESP_LOGW("PUZ", "MANUAL OVERRIDE fail: serial '%s' last digit odd/non-digit -> HOLD required",
-                              #                       serial.c_str());
-                              #               id(puzzle_exit).execute(1, 1);  // wrong input
-                              #             }
-
-                              #             return;
-                              #           }
-
-                              #           // Fallback for other seeds (still fail for now)
-                              #           ESP_LOGW("PUZ", "BETA seed %d not implemented yet", id(current_puzzle_seed));
-                              #           id(puzzle_exit).execute(1, 1);
-
                         # >>> [SYS-PUZ-CHARLIE] Puzzle Charlie – Wires container (shell) <<<
                         - obj:
                             id: puzzle_charlie_container
                             x: 0
                             y: 0
                             width: 560
-                            height: 300
+                            height: 380
                             bg_color: 0x000000
                             border_width: 0
                             hidden: true
@@ -2834,6 +2981,22 @@ lvgl:
                                   x: 5
                                   y: 5
                                   text_font: pip_sub_font
+
+                              # The busses
+                              - button:
+                                  id: btn_buss_0
+                                  x: 50
+                                  y: 80
+                                  width: 100
+                                  height: 220
+                                  border_width: 2
+                              - button:
+                                  id: btn_buss_1
+                                  x: 410
+                                  y: 80
+                                  width: 100
+                                  height: 220
+                                  border_width: 2
                               
                               # THE 4 WIRES
                               - button:
@@ -2850,7 +3013,7 @@ lvgl:
                               - button:
                                   id: btn_wire_1
                                   x: 130
-                                  y: 150
+                                  y: 160
                                   width: 300
                                   height: 10
                                   border_width: 0
@@ -2861,7 +3024,7 @@ lvgl:
                               - button:
                                   id: btn_wire_2
                                   x: 130
-                                  y: 200
+                                  y: 220
                                   width: 300
                                   height: 10
                                   border_width: 0
@@ -2872,7 +3035,7 @@ lvgl:
                               - button:
                                   id: btn_wire_3
                                   x: 130
-                                  y: 250
+                                  y: 280
                                   width: 300
                                   height: 10
                                   border_width: 0
@@ -2891,12 +3054,116 @@ lvgl:
                             bg_color: 0x000000
                             border_width: 0
                             hidden: true
+                            # >>> [SYS-PUZ-DELTA] Keypad UI (4 buttons + status indicator)
                             widgets:
+                              # Title
                               - label:
-                                  text: "DELTA PUZZLE (KEYPAD)"
-                                  x: 140
-                                  y: 100
-                                  text_font: pip_main_font
+                                  id: delta_title
+                                  text: "AUTH LATTICE"
+                                  x: 10
+                                  y: 5
+                                  text_font: pip_sub_font
+                                  text_color: pip_bright
+
+                              # Status light (starts red; we flip to green on success later)
+                              - obj:
+                                  id: delta_status_led
+                                  x: 265
+                                  y: 8
+                                  width: 30
+                                  height: 30
+                                  bg_color: 0x660000     # muted red
+                                  border_width: 2
+                                  border_color: pip_bright
+                                  radius: 10
+
+                              # Button 0
+                              - button:
+                                  id: delta_btn_0
+                                  x: 150
+                                  y: 55
+                                  width: 100
+                                  height: 100
+                                  bg_color: 0x000000
+                                  border_width: 2
+                                  border_color: pip_bright
+                                  widgets:
+                                    - label:
+                                        id: delta_lbl_0
+                                        text: "?"
+                                        align: CENTER
+                                        text_font: key_main_font
+                                        text_color: pip_bright
+                                  on_click:
+                                    - lambda: |-
+                                        id(delta_last_pressed) = 0;
+                                    - script.execute: delta_button_pressed
+
+                              # Button 1
+                              - button:
+                                  id: delta_btn_1
+                                  x: 300
+                                  y: 55
+                                  width: 100
+                                  height: 100
+                                  bg_color: 0x000000
+                                  border_width: 2
+                                  border_color: pip_bright
+                                  widgets:
+                                    - label:
+                                        id: delta_lbl_1
+                                        text: "?"
+                                        align: CENTER
+                                        text_font: key_main_font
+                                        text_color: pip_bright
+                                  on_click:
+                                    - lambda: |-
+                                        id(delta_last_pressed) = 1;
+                                    - script.execute: delta_button_pressed
+
+                              # Button 2
+                              - button:
+                                  id: delta_btn_2
+                                  x: 150
+                                  y: 185
+                                  width: 100
+                                  height: 100
+                                  bg_color: 0x000000
+                                  border_width: 2
+                                  border_color: pip_bright
+                                  widgets:
+                                    - label:
+                                        id: delta_lbl_2
+                                        text: "?"
+                                        align: CENTER
+                                        text_font: key_main_font
+                                        text_color: pip_bright
+                                  on_click:
+                                    - lambda: |-
+                                        id(delta_last_pressed) = 2;
+                                    - script.execute: delta_button_pressed
+
+                              # Button 3
+                              - button:
+                                  id: delta_btn_3
+                                  x: 300
+                                  y: 185
+                                  width: 100
+                                  height: 100
+                                  bg_color: 0x000000
+                                  border_width: 2
+                                  border_color: pip_bright
+                                  widgets:
+                                    - label:
+                                        id: delta_lbl_3
+                                        text: "?"
+                                        align: CENTER
+                                        text_font: key_main_font
+                                        text_color: pip_bright
+                                  on_click:
+                                    - lambda: |-
+                                        id(delta_last_pressed) = 3;
+                                    - script.execute: delta_button_pressed
 
                         # THE COUNTDOWN TIMER (This fixes your compiler error!)
                         - label:
