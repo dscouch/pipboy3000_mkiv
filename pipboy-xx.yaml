@@ -2456,37 +2456,37 @@ lvgl:
                         y: 0
                     - label:
                         text: ${pip_version}
-                        x: 165   # Moved left from 425
+                        x: 165
                         y: 5
                         text_color: pip_unselected
                         text_font: pip_sub_font
                     # ---> NEW: BATTERY METER <---
-                    - bar:
-                        id: ui_battery_bar
-                        x: 295
-                        y: 0
-                        width: 100
-                        height: "100%"
-                        min_value: 0
-                        max_value: 100
-                        value: 100
-                        bg_color: 0x006600 
-                        indicator:
-                          bg_color: pip_bright
-                    # The Lightning Bolt Overlay 
-                    - label:
-                        text: "\uF0E7"            # The LVGL charge symbol
-                        x: 305                   # Positioned 10 pixels from the left edge of the bar
-                        y: 5                   # Aligned to sit inside the bar
-                        text_color: 0x000000     # Black colour
-                        text_font: montserrat_26 # Forces the internal font
-                    - label:
-                        id: ui_battery_label
-                        text: "100%"
-                        x: 405
-                        y: 5
-                        text_color: pip_unselected
-                        text_font: pip_sub_font
+                    # - bar:
+                    #     id: ui_battery_bar
+                    #     x: 295
+                    #     y: 0
+                    #     width: 100
+                    #     height: "100%"
+                    #     min_value: 0
+                    #     max_value: 100
+                    #     value: 100
+                    #     bg_color: 0x006600 
+                    #     indicator:
+                    #       bg_color: pip_bright
+                    # # The Lightning Bolt Overlay 
+                    # - label:
+                    #     text: "\uF0E7"            # The LVGL charge symbol
+                    #     x: 305                   # Positioned 10 pixels from the left edge of the bar
+                    #     y: 5                   # Aligned to sit inside the bar
+                    #     text_color: 0x000000     # Black colour
+                    #     text_font: montserrat_26 # Forces the internal font
+                    # - label:
+                    #     id: ui_battery_label
+                    #     text: "100%"
+                    #     x: 405
+                    #     y: 5
+                    #     text_color: pip_unselected
+                    #     text_font: pip_sub_font
                         
                     - label:
                         text: "XP:"
@@ -2503,7 +2503,7 @@ lvgl:
                   id: main_tabs_spc
                   align: TOP_MID
                   width: "100%"
-                  height: 438
+                  height: 430
                   scrollable: false
                   bg_color: 0x000000
                   border_width: 0
@@ -2547,11 +2547,11 @@ lvgl:
                               # --- THE SIDE NAVIGATION MENU ---
                               - buttonmatrix:  #600x440
                                   id: stat_side_menu
-                                  align: LEFT_MID
-                                  #x: 10
-                                  #y: 20
-                                  width: 150
-                                  height: 150
+                                  align: TOP_LEFT
+                                  x: 5
+                                  y: 5
+                                  width: 450
+                                  height: 50
                                   one_checked: true
                                   items:
                                     text_font: pip_sub_font
@@ -2561,12 +2561,10 @@ lvgl:
                                         control:
                                           checkable: true
                                           checked: true
-                                    - buttons:
                                       - text: "SPECIAL"
                                         control:
                                           checkable: true
                                           checked: false
-                                    - buttons:
                                       - text: "PERKS"
                                         control:
                                           checkable: true
@@ -2591,8 +2589,9 @@ lvgl:
                               - obj:
                                   id: stat_status_page
                                   align: RIGHT_MID
-                                  width: "75%"
-                                  height: "100%"
+                                  y: 60
+                                  width: "100%"
+                                  height: 375
                                   bg_color: 0x000000
                                   border_width: 0
                                   scrollable: false
